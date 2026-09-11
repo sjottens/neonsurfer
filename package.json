@@ -1,0 +1,16 @@
+{
+  "name": "sjottens",
+  "version": "1.0.0",
+  "description": "Sjottens - a neon arcade glider game. 100% client-side, no login, no server.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview --port 5174"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vite": "^8.3.0"
+  }
+}

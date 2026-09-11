@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#05010f" />
+    <title>Neon Surfer</title>
+    <meta name="description" content="Neon Surfer - a neon arcade glider. Free, no account, 100% in your browser." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="page">
+      <!-- Reserved ad slot. Only shown when there's room beside the game (see styles.css).
+           No ad script is wired up here - drop your AdSense (or other network) unit in
+           this element once you have a publisher id; it's sized like a 160x600 skyscraper. -->
+      <aside class="ad-slot" id="ad-left" aria-label="Advertisement space"></aside>
+
+      <div id="app">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-root"></div>
+      </div>
+
+      <aside class="ad-slot" id="ad-right" aria-label="Advertisement space"></aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
