@@ -96,6 +96,13 @@ class AudioEngine {
     this.tone(783.99, 0.16, 0.1, "sine", 0.07);
   }
 
+  /** Descending glide for the slow-mo power-up - the inverse of star()'s climb. */
+  slowmo() {
+    this.tone(900, 0.12, 0.09, "triangle");
+    this.tone(600, 0.14, 0.09, "triangle", 0.08);
+    this.tone(400, 0.2, 0.09, "triangle", 0.16);
+  }
+
   startThrust() {
     if (this.muted) return;
     const ctx = this.getContext();

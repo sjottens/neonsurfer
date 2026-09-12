@@ -25,7 +25,21 @@ export interface HudState {
   score: number;
   coins: number;
   best: number;
+  shieldTime: number;
+  magnetTime: number;
+  multiplierTime: number;
+  slowmoTime: number;
 }
+
+const MAGNET_RADIUS = 260; // world px - how far a coin gets pulled from
+const MAGNET_PULL_SPEED = 900; // px/s toward the player once inside the radius
+const BUFF_DURATION = {
+  shield: 4,
+  magnet: 5,
+  multiplier: 6,
+  slowmo: 4,
+} as const;
+const SLOWMO_FACTOR = 0.55; // how much slower the world scrolls while active
 
 const MAX_DT = 1 / 30; // clamp huge frame gaps (tab backgrounded) so physics never "teleports"
 
@@ -56,6 +70,13 @@ export class Game {
   private rafHandle = 0;
   private lastTimestamp = 0;
   private startHoldPending = false;
+
+  // Active power-up timers, seconds remaining (0 = inactive).
+  private shieldTime = 0;
+  private magnetTime = 0;
+  private multiplierTime = 0;
+  private slowmoTime = 0;
+  private bonusPoints = 0; // extra score from coins/stars collected while multiplier is active
 
   onStateChange: ((state: GameState, payload?: RunResult) => void) | null = null;
   onHud: ((hud: HudState) => void) | null = null;
@@ -111,6 +132,11 @@ export class Game {
     this.starsThisRun = 0;
     this.scrollSpeed = 300;
     this.lastMilestone = 0;
+    this.shieldTime = 0;
+    this.magnetTime = 0;
+    this.multiplierTime = 0;
+    this.slowmoTime = 0;
+    this.bonusPoints = 0;
     this.rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
     this.generator = new ObstacleGenerator(VIRTUAL_HEIGHT, this.rng);
     this.input.reset();
@@ -176,7 +202,15 @@ export class Game {
     this.render();
 
     if (this.state === "playing") {
-      this.onHud?.({ score: this.currentScore(), coins: save.get().totalCoins + this.coinsThisRun, best: save.get().bestScore });
+      this.onHud?.({
+        score: this.currentScore(),
+        coins: save.get().totalCoins + this.coinsThisRun,
+        best: save.get().bestScore,
+        shieldTime: this.shieldTime,
+        magnetTime: this.magnetTime,
+        multiplierTime: this.multiplierTime,
+        slowmoTime: this.slowmoTime,
+      });
     }
   }
 
@@ -184,42 +218,46 @@ export class Game {
     const thrustUp = this.input.holdingUp && !this.startHoldPending;
     const thrustDown = this.input.holdingDown && !this.startHoldPending;
 
-    this.distance += this.scrollSpeed * dt;
+    this.shieldTime = Math.max(0, this.shieldTime - dt);
+    this.magnetTime = Math.max(0, this.magnetTime - dt);
+    this.multiplierTime = Math.max(0, this.multiplierTime - dt);
+    this.slowmoTime = Math.max(0, this.slowmoTime - dt);
+
+    // Slow-mo eases the world (scroll + obstacles), never the player's own
+    // steering speed - it's a breather, not a bullet-time cheat.
+    const worldSpeed = this.slowmoTime > 0 ? this.scrollSpeed * SLOWMO_FACTOR : this.scrollSpeed;
+
+    this.distance += worldSpeed * dt;
     this.scrollSpeed = this.generator.scrollSpeedAt(this.distance);
-    this.background.update(dt, this.scrollSpeed, this.distance / 7000);
+    this.background.update(dt, worldSpeed, this.distance / 7000);
 
     this.player.update(dt, thrustUp, thrustDown, VIRTUAL_HEIGHT);
+    this.player.shieldActive = this.shieldTime > 0;
+    this.player.magnetActive = this.magnetTime > 0;
 
-    const spawned = this.generator.step(dt, this.distance, this.scrollSpeed, this.worldWidth + 80);
+    const spawned = this.generator.step(dt, this.distance, worldSpeed, this.worldWidth + 80);
     if (spawned) this.obstacles.push(spawned);
 
     for (const o of this.obstacles) {
-      updateObstacle(o, dt, this.scrollSpeed);
+      updateObstacle(o, dt, worldSpeed);
 
       if (!o.passed && o.x + o.width / 2 < this.player.x) {
         o.passed = true;
       }
 
-      if (o.pickup && !o.pickupCollected) {
-        const dist = Math.hypot(this.player.x - o.x, this.player.y - o.pickupY);
-        const pickupRadius = o.pickup === "star" ? 17 : 13;
-        if (dist < this.player.radius + pickupRadius) {
-          o.pickupCollected = true;
-          if (o.pickup === "coin") {
-            this.coinsThisRun += 1;
-            audio.coin();
-            this.particles.sparkle(o.x, o.pickupY, "#ffe873");
-          } else {
-            this.starsThisRun += 1;
-            audio.star();
-            this.particles.burst(o.x, o.pickupY, "#7dfcff", 16, { speed: 220, size: 5, life: 0.6 });
-          }
-        }
-      }
+      if (this.magnetTime > 0) this.applyMagnetPull(o, dt);
+      this.tryCollectPickup(o);
 
       if (checkCollision(o, this.player)) {
-        this.handleCrash();
-        break;
+        if (this.shieldTime > 0) {
+          if (!o.shieldHit) {
+            o.shieldHit = true;
+            this.particles.sparkle(this.player.x, this.player.y, "#4da6ff");
+          }
+        } else {
+          this.handleCrash();
+          break;
+        }
       }
     }
 
@@ -257,7 +295,69 @@ export class Game {
   }
 
   private currentScore(): number {
-    return Math.floor(this.distance / 10) + this.coinsThisRun * 5 + this.starsThisRun * 25;
+    return Math.floor(this.distance / 10) + this.coinsThisRun * 5 + this.starsThisRun * 25 + this.bonusPoints;
+  }
+
+  /** Reel an uncollected coin toward the player once a magnet is active. */
+  private applyMagnetPull(o: Obstacle, dt: number) {
+    if (o.pickup !== "coin" || o.pickupCollected) return;
+    const px = o.x + o.pickupOffsetX;
+    const py = o.pickupY + o.pickupOffsetY;
+    const dx = this.player.x - px;
+    const dy = this.player.y - py;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= 1 || dist >= MAGNET_RADIUS) return;
+    const step = Math.min(dist, MAGNET_PULL_SPEED * dt);
+    o.pickupOffsetX += (dx / dist) * step;
+    o.pickupOffsetY += (dy / dist) * step;
+  }
+
+  private tryCollectPickup(o: Obstacle) {
+    if (!o.pickup || o.pickupCollected) return;
+    const px = o.x + o.pickupOffsetX;
+    const py = o.pickupY + o.pickupOffsetY;
+    const dist = Math.hypot(this.player.x - px, this.player.y - py);
+    const pickupRadius = o.pickup === "star" || o.pickup === "shield" ? 17 : 13;
+    if (dist >= this.player.radius + pickupRadius) return;
+    o.pickupCollected = true;
+    this.collectPickup(o.pickup, px, py);
+  }
+
+  private collectPickup(kind: NonNullable<Obstacle["pickup"]>, x: number, y: number) {
+    switch (kind) {
+      case "coin":
+        this.coinsThisRun += 1;
+        if (this.multiplierTime > 0) this.bonusPoints += 5;
+        audio.coin();
+        this.particles.sparkle(x, y, "#ffe873");
+        break;
+      case "star":
+        this.starsThisRun += 1;
+        if (this.multiplierTime > 0) this.bonusPoints += 25;
+        audio.star();
+        this.particles.burst(x, y, "#7dfcff", 16, { speed: 220, size: 5, life: 0.6 });
+        break;
+      case "shield":
+        this.shieldTime += BUFF_DURATION.shield;
+        audio.star();
+        this.particles.burst(x, y, "#4da6ff", 18, { speed: 240, size: 5, life: 0.7 });
+        break;
+      case "magnet":
+        this.magnetTime += BUFF_DURATION.magnet;
+        audio.purchase();
+        this.particles.burst(x, y, "#7dfcff", 14, { speed: 200, size: 4, life: 0.6 });
+        break;
+      case "multiplier":
+        this.multiplierTime += BUFF_DURATION.multiplier;
+        audio.milestone();
+        this.particles.burst(x, y, "#ffe873", 16, { speed: 220, size: 5, life: 0.6 });
+        break;
+      case "slowmo":
+        this.slowmoTime += BUFF_DURATION.slowmo;
+        audio.slowmo();
+        this.particles.burst(x, y, "#b26bff", 16, { speed: 180, size: 5, life: 0.7 });
+        break;
+    }
   }
 
   // ---------------------------------------------------------------- render

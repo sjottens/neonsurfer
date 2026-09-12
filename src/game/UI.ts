@@ -61,7 +61,7 @@ export class UI {
       ${
         seenHint
           ? ""
-          : `<p class="hint">Hold <kbd>↑</kbd> to rise, <kbd>↓</kbd> to dive - or use the on-screen buttons on mobile. Dodge the neon, grab the coins!</p>`
+          : `<p class="hint">Hold <kbd>↑</kbd> to rise, <kbd>↓</kbd> to dive - or use the on-screen buttons on mobile. Dodge the neon, grab the coins - and watch for the blue star (shield), magnet, 2× and slow-mo power-ups!</p>`
       }
       <p class="credit">100% in je browser · geen account nodig · voortgang lokaal opgeslagen</p>
     `;
@@ -86,6 +86,7 @@ export class UI {
       <div>
         <div class="hud-score" id="hud-score">0</div>
         <div class="hud-best">BEST ${formatNumber(save.get().bestScore)}</div>
+        <div class="hud-buffs" id="hud-buffs"></div>
       </div>
       <div class="hud-top-right">
         <button class="icon-btn" data-action="pause" title="Pause">⏸</button>
@@ -145,6 +146,20 @@ export class UI {
     const coinsEl = this.hudEl.querySelector("#hud-coins");
     if (scoreEl) scoreEl.textContent = formatNumber(hud.score);
     if (coinsEl) coinsEl.textContent = `🪙 ${formatNumber(hud.coins)}`;
+
+    const buffsEl = this.hudEl.querySelector("#hud-buffs");
+    if (buffsEl) {
+      const buffs: [string, string, number][] = [
+        ["shield", "🛡", hud.shieldTime],
+        ["magnet", "🧲", hud.magnetTime],
+        ["multiplier", "2×", hud.multiplierTime],
+        ["slowmo", "🐢", hud.slowmoTime],
+      ];
+      buffsEl.innerHTML = buffs
+        .filter(([, , time]) => time > 0)
+        .map(([kind, icon, time]) => `<span class="buff-badge buff-${kind}">${icon} ${Math.ceil(time)}</span>`)
+        .join("");
+    }
   }
 
   private renderPause() {

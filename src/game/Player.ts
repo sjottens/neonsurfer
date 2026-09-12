@@ -34,12 +34,18 @@ export class Player {
   private trailTimer = 0;
   alive = true;
 
+  // Set by Game each frame from the active power-up timers - purely visual.
+  shieldActive = false;
+  magnetActive = false;
+
   reset(startY: number) {
     this.y = startY;
     this.vy = 0;
     this.angle = 0;
     this.trail = [];
     this.alive = true;
+    this.shieldActive = false;
+    this.magnetActive = false;
   }
 
   update(dt: number, thrustUp: boolean, thrustDown: boolean, worldHeight: number) {
@@ -82,6 +88,35 @@ export class Player {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+
+    if (this.magnetActive) {
+      // faint pulsing field showing the coin-pull radius is centered here
+      const pulse = 0.5 + 0.5 * Math.sin(time * 4);
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(125, 252, 255, 0.35)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 8]);
+      ctx.arc(this.x, this.y, this.radius * (2.4 + pulse * 0.6), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    if (this.shieldActive) {
+      // protective bubble - a clear "you can't crash right now" tell
+      const pulse = 1 + Math.sin(time * 8) * 0.08;
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.shadowColor = "#4da6ff";
+      ctx.shadowBlur = 18;
+      ctx.strokeStyle = "rgba(125, 200, 255, 0.85)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * 2.5 * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(77, 166, 255, 0.12)";
+      ctx.fill();
+      ctx.restore();
+    }
 
     ctx.save();
     ctx.translate(this.x, this.y);

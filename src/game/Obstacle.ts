@@ -1,7 +1,7 @@
 import type { Player } from "./Player";
 
 export type ObstacleKind = "gateWalls" | "spikes" | "movingGate" | "rotor";
-export type PickupKind = "coin" | "star" | null;
+export type PickupKind = "coin" | "star" | "shield" | "magnet" | "multiplier" | "slowmo" | null;
 
 export interface Obstacle {
   id: number;
@@ -11,9 +11,14 @@ export interface Obstacle {
   worldHeight: number;
   age: number; // seconds since spawn, used for animated kinds
   passed: boolean; // already scored for clearing it
+  shieldHit: boolean; // already bounced off a shielded player - don't re-spark every frame
   pickup: PickupKind;
   pickupCollected: boolean;
   pickupY: number;
+  // Nudged toward the player while a magnet is active (coins only) - the
+  // pickup's drawn/collected position is (x + offsetX, pickupY + offsetY).
+  pickupOffsetX: number;
+  pickupOffsetY: number;
 
   // gateWalls / spikes / movingGate share a "gap" shape
   gapCenter: number;
@@ -102,7 +107,7 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, o: Obstacle, worldHe
   }
 
   if (o.pickup && !o.pickupCollected) {
-    drawPickup(ctx, o.x, o.pickupY, o.pickup, time);
+    drawPickup(ctx, o.x + o.pickupOffsetX, o.pickupY + o.pickupOffsetY, o.pickup, time);
   }
 }
 
@@ -201,6 +206,61 @@ function drawPickup(ctx: CanvasRenderingContext2D, x: number, y: number, kind: P
     ctx.fillStyle = "#dffcff";
     drawStarPath(ctx, 0, 0, 5, 15, 7);
     ctx.fill();
+  } else if (kind === "shield") {
+    // the "blue star" power-up: a few seconds of invincibility
+    ctx.rotate(spin * 0.6);
+    ctx.shadowColor = "#4da6ff";
+    ctx.shadowBlur = 24;
+    ctx.fillStyle = "#a9d8ff";
+    drawStarPath(ctx, 0, 0, 5, 16, 7.5);
+    ctx.fill();
+    ctx.strokeStyle = "#0b3d91";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  } else if (kind === "magnet") {
+    // classic horseshoe magnet - pulls nearby coins toward the player
+    ctx.shadowColor = "#7dfcff";
+    ctx.shadowBlur = 18;
+    ctx.rotate(Math.PI); // open end faces down
+    ctx.strokeStyle = "#dfe6ee";
+    ctx.lineWidth = 6;
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    ctx.arc(0, 0, 9, Math.PI * 0.15, Math.PI * 0.85, false);
+    ctx.stroke();
+    ctx.fillStyle = "#ff4d4d";
+    ctx.fillRect(-11.5, -1, 5, 8);
+    ctx.fillStyle = "#4da6ff";
+    ctx.fillRect(6.5, -1, 5, 8);
+  } else if (kind === "multiplier") {
+    // 2x score for a few seconds
+    ctx.rotate(Math.PI / 4);
+    ctx.shadowColor = "#ffe873";
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = "#ffe873";
+    ctx.fillRect(-11, -11, 22, 22);
+    ctx.rotate(-Math.PI / 4);
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = "#3a2b00";
+    ctx.font = "bold 13px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("2×", 0, 1);
+  } else if (kind === "slowmo") {
+    // briefly slows the world down without slowing the player's own steering
+    ctx.shadowColor = "#b26bff";
+    ctx.shadowBlur = 20;
+    ctx.strokeStyle = "#e7d4ff";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -7);
+    ctx.moveTo(0, 0);
+    ctx.lineTo(5, 3);
+    ctx.stroke();
   }
   ctx.restore();
 }
