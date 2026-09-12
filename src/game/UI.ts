@@ -61,7 +61,7 @@ export class UI {
       ${
         seenHint
           ? ""
-          : `<p class="hint">Hold <kbd>↑</kbd> to rise, <kbd>↓</kbd> to dive - or hold the top/bottom half of the screen. Dodge the neon, grab the coins!</p>`
+          : `<p class="hint">Hold <kbd>↑</kbd> to rise, <kbd>↓</kbd> to dive - or use the on-screen buttons on mobile. Dodge the neon, grab the coins!</p>`
       }
       <p class="credit">100% in je browser · geen account nodig · voortgang lokaal opgeslagen</p>
     `;
@@ -103,6 +103,40 @@ export class UI {
       if (e.code === "Escape" && this.game.currentState === "playing") this.game.pause();
     };
     window.addEventListener("keydown", escHandler);
+
+    this.renderSteerButtons();
+  }
+
+  /**
+   * Dedicated mobile steering buttons: left = up, right = down. Shown only
+   * on touch devices (see the `(pointer: coarse)` gate in styles.css) -
+   * mouse/keyboard players keep using the arrow keys / tap-zone instead.
+   */
+  private renderSteerButtons() {
+    const wrap = document.createElement("div");
+    wrap.className = "steer-buttons";
+    wrap.innerHTML = `
+      <button class="steer-btn steer-btn-up" data-dir="up" aria-label="Omhoog">▲</button>
+      <button class="steer-btn steer-btn-down" data-dir="down" aria-label="Omlaag">▼</button>
+    `;
+    this.root.appendChild(wrap);
+
+    for (const btn of wrap.querySelectorAll<HTMLButtonElement>(".steer-btn")) {
+      const dir = btn.dataset.dir === "up" ? "up" : "down";
+      const press = (e: Event) => {
+        e.preventDefault();
+        btn.classList.add("active");
+        this.game.setSteerButton(dir, true);
+      };
+      const release = () => {
+        btn.classList.remove("active");
+        this.game.setSteerButton(dir, false);
+      };
+      btn.addEventListener("pointerdown", press);
+      btn.addEventListener("pointerup", release);
+      btn.addEventListener("pointercancel", release);
+      btn.addEventListener("pointerleave", release);
+    }
   }
 
   private updateHud(hud: HudState) {

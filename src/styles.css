@@ -404,3 +404,84 @@ body {
     gap: 16px;
   }
 }
+
+/* ---------- mobile steering buttons ---------- */
+
+/* Only for touch devices - mouse/keyboard players already have the arrow
+   keys and the tap-zone, so these would just be visual clutter for them. */
+.steer-buttons {
+  display: none;
+}
+@media (pointer: coarse) {
+  .steer-buttons {
+    display: contents;
+  }
+}
+
+.steer-btn {
+  position: absolute;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 2px solid rgba(125, 252, 255, 0.45);
+  background: rgba(5, 1, 15, 0.55);
+  color: var(--neon-cyan);
+  font-size: 30px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 18px rgba(125, 252, 255, 0.2);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.steer-btn-up {
+  left: max(20px, env(safe-area-inset-left));
+}
+.steer-btn-down {
+  right: max(20px, env(safe-area-inset-right));
+}
+.steer-btn.active {
+  background: rgba(125, 252, 255, 0.3);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 26px rgba(125, 252, 255, 0.55);
+  transform: scale(0.94);
+}
+
+/* ---------- rotate-device lock (mobile portrait) ---------- */
+
+#rotate-lock {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--bg-void);
+  text-align: center;
+  padding: 24px;
+}
+.rotate-icon {
+  font-size: 56px;
+  animation: rotate-hint 1.6s ease-in-out infinite;
+}
+@keyframes rotate-hint {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-90deg); }
+}
+
+/* Mobile-only, portrait-only: coarse pointer + narrow viewport keeps this
+   off tablets/desktops that happen to be tall (e.g. a resized browser
+   window), which have no real orientation to rotate anyway. */
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 900px) {
+  #page {
+    display: none;
+  }
+  #rotate-lock {
+    display: flex;
+  }
+}

@@ -138,6 +138,46 @@ export class Player {
     ctx.closePath();
     ctx.fill();
 
+    // ---- rider: a tiny neon stick-figure standing on the deck. It leans
+    // into whichever way the board is steered and bobs gently at rest, so
+    // it never looks frozen even mid-glide. ----
+    const lean = clamp(this.vy / PHYSICS.moveSpeed, -1, 1); // -1 climbing, +1 diving
+    const bob = Math.sin(time * 5) * this.radius * 0.06;
+    const standX = len * 0.1; // stance over the board's widest point
+    const hipY = 0;
+    const shoulderX = standX + lean * this.radius * 0.5; // torso leans into the turn
+    const shoulderY = hipY - this.radius * 1.7 + bob;
+    const headR = this.radius * 0.3;
+
+    ctx.shadowColor = skin.glow;
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = Math.max(1.2, this.radius * 0.11);
+    ctx.lineCap = "round";
+
+    // legs, planted shoulder-width apart, knees bending toward the lean
+    ctx.beginPath();
+    ctx.moveTo(standX - this.radius * 0.4, hipY - this.radius * 0.1);
+    ctx.lineTo(shoulderX, shoulderY + headR);
+    ctx.moveTo(standX + this.radius * 0.4, hipY - this.radius * 0.1);
+    ctx.lineTo(shoulderX, shoulderY + headR);
+    ctx.stroke();
+
+    // arms, swinging out opposite the lean for balance
+    ctx.beginPath();
+    ctx.moveTo(shoulderX, shoulderY + headR * 0.6);
+    ctx.lineTo(shoulderX - this.radius * 0.9, shoulderY - lean * this.radius * 0.7);
+    ctx.moveTo(shoulderX, shoulderY + headR * 0.6);
+    ctx.lineTo(shoulderX + this.radius * 0.9, shoulderY + lean * this.radius * 0.7);
+    ctx.stroke();
+
+    // head
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(shoulderX, shoulderY, headR, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.restore();
     ctx.shadowBlur = 0;
   }

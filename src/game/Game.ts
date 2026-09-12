@@ -149,6 +149,12 @@ export class Game {
     save.setMuted(muted);
   }
 
+  /** Driven by the on-screen mobile steering buttons (left = up, right = down). */
+  setSteerButton(direction: "up" | "down", active: boolean) {
+    if (direction === "up") this.input.setButtonUp(active);
+    else this.input.setButtonDown(active);
+  }
+
   destroy() {
     cancelAnimationFrame(this.rafHandle);
     this.input.detach(this.canvas);

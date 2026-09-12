@@ -12,6 +12,15 @@ if (!canvas || !uiRoot) {
 const game = new Game(canvas);
 new UI(uiRoot, game);
 
+// Mirrors the (pointer: coarse) + (orientation: portrait) query in
+// styles.css that swaps in the "rotate your phone" overlay - pause an
+// in-progress run when it appears so obstacles don't keep coming while the
+// player can't see or steer.
+const portraitLock = window.matchMedia("(pointer: coarse) and (orientation: portrait) and (max-width: 900px)");
+portraitLock.addEventListener("change", (e) => {
+  if (e.matches && game.currentState === "playing") game.pause();
+});
+
 if (import.meta.env.DEV) {
   // Dev-only escape hatch for manual/automated testing - not shipped in the production build.
   (window as any).__SJOTTENS_DEBUG__ = game;
