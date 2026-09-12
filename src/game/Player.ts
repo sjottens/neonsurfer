@@ -92,8 +92,8 @@ export class Player {
 
     // ---- classic shortboard silhouette, lying on its side: rounded nose
     // (+x, facing the direction of travel), straight-ish parallel rails,
-    // and a proper swallowtail - two pointed horns with a V notch between
-    // them - at the tail (-x). ----
+    // and a straight taper down to a flat squash tail (-x) - no swallowtail
+    // notch, just a real board's tail line. ----
     const pulse = 1 + Math.sin(time * 6) * 0.08;
     ctx.shadowColor = skin.glow;
     ctx.shadowBlur = 22 * pulse;
@@ -101,11 +101,9 @@ export class Player {
     ctx.beginPath();
     ctx.moveTo(len, 0); // nose tip
     ctx.quadraticCurveTo(len * 0.75, -wid * 1.05, len * 0.05, -wid); // nose -> shoulder, top rail
-    ctx.lineTo(-len * 0.5, -wid * 0.92); // shoulder -> top rail, nearly straight down the board
-    ctx.quadraticCurveTo(-len * 0.72, -wid * 0.95, -len * 0.82, -wid * 1.2); // flare out into the top tail horn (wider than the body)
-    ctx.lineTo(-len * 0.6, 0); // deep V notch, cut inward all the way to the tail center
-    ctx.lineTo(-len * 0.82, wid * 1.2); // back out to the bottom tail horn
-    ctx.quadraticCurveTo(-len * 0.72, wid * 0.95, -len * 0.5, wid * 0.92); // tail horn -> bottom rail
+    ctx.lineTo(-len * 0.92, -wid * 0.32); // straight taper down to the tail, top rail
+    ctx.lineTo(-len * 0.92, wid * 0.32); // flat tail edge, straight across
+    ctx.lineTo(len * 0.05, wid); // tail -> shoulder, bottom rail
     ctx.quadraticCurveTo(len * 0.75, wid * 1.05, len, 0); // shoulder -> nose, bottom rail
     ctx.closePath();
     ctx.fill();
@@ -116,7 +114,7 @@ export class Player {
     ctx.lineWidth = Math.max(1, this.radius * 0.08);
     ctx.beginPath();
     ctx.moveTo(len * 0.92, 0);
-    ctx.lineTo(-len * 0.62, 0);
+    ctx.lineTo(-len * 0.9, 0);
     ctx.stroke();
 
     // bright deck highlight near the nose
@@ -132,9 +130,9 @@ export class Player {
     ctx.shadowBlur = 14;
     ctx.fillStyle = skin.glow;
     ctx.beginPath();
-    ctx.moveTo(-len * 0.5, wid * 0.5);
-    ctx.lineTo(-len * 0.75, wid * 1.3);
-    ctx.lineTo(-len * 0.3, wid * 0.7);
+    ctx.moveTo(-len * 0.62, wid * 0.28);
+    ctx.lineTo(-len * 0.88, wid * 0.85);
+    ctx.lineTo(-len * 0.45, wid * 0.4);
     ctx.closePath();
     ctx.fill();
 
@@ -151,7 +149,7 @@ export class Player {
 
     ctx.shadowColor = skin.glow;
     ctx.shadowBlur = 8;
-    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.strokeStyle = "#0a0a0f";
     ctx.lineWidth = Math.max(1.2, this.radius * 0.11);
     ctx.lineCap = "round";
 
@@ -173,7 +171,7 @@ export class Player {
 
     // head
     ctx.shadowBlur = 10;
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = "#0a0a0f";
     ctx.beginPath();
     ctx.arc(shoulderX, shoulderY, headR, 0, Math.PI * 2);
     ctx.fill();
