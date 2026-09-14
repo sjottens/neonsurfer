@@ -93,7 +93,6 @@ export class Game {
 
     this.input.attach(canvas);
     this.input.onPress = () => {
-      audio.startThrust();
       if (this.state === "playing" && this.startHoldPending) this.startHoldPending = false;
     };
 
@@ -146,7 +145,6 @@ export class Game {
 
   pause() {
     if (this.state !== "playing") return;
-    audio.stopThrust();
     this.setState("paused");
   }
 
@@ -157,7 +155,6 @@ export class Game {
   }
 
   goToMenu() {
-    audio.stopThrust();
     this.setState("menu");
   }
 
@@ -272,7 +269,6 @@ export class Game {
   }
 
   private handleCrash() {
-    audio.stopThrust();
     audio.crash();
     this.particles.burst(this.player.x, this.player.y, getSkin(save.get().equippedSkin).core, 34, {
       speed: 340,

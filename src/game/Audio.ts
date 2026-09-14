@@ -1,19 +1,14 @@
 /**
  * All sound in Sjottens is synthesized with the Web Audio API - no audio
- * files to fetch, nothing to preload, zero bytes of asset weight. A
- * continuous thrust hum uses a gain node that ramps up/down instead of
- * being retriggered, so holding the button doesn't spam the audio graph.
+ * files to fetch, nothing to preload, zero bytes of asset weight.
  */
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
-  private thrustOsc: OscillatorNode | null = null;
-  private thrustGain: GainNode | null = null;
   private muted = false;
 
   setMuted(muted: boolean) {
     this.muted = muted;
-    if (muted) this.stopThrust();
   }
 
   private getContext(): AudioContext | null {
@@ -103,42 +98,6 @@ class AudioEngine {
     this.tone(400, 0.2, 0.09, "triangle", 0.16);
   }
 
-  startThrust() {
-    if (this.muted) return;
-    const ctx = this.getContext();
-    if (!ctx || this.thrustOsc) return;
-
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = "sawtooth";
-    osc.frequency.value = 120;
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 500;
-
-    g.gain.setValueAtTime(0, ctx.currentTime);
-    g.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 0.08);
-
-    osc.connect(filter);
-    filter.connect(g);
-    g.connect(ctx.destination);
-    osc.start();
-
-    this.thrustOsc = osc;
-    this.thrustGain = g;
-  }
-
-  stopThrust() {
-    if (!this.thrustOsc || !this.thrustGain || !this.ctx) return;
-    const ctx = this.ctx;
-    this.thrustGain.gain.cancelScheduledValues(ctx.currentTime);
-    this.thrustGain.gain.setValueAtTime(this.thrustGain.gain.value, ctx.currentTime);
-    this.thrustGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
-    const osc = this.thrustOsc;
-    osc.stop(ctx.currentTime + 0.12);
-    this.thrustOsc = null;
-    this.thrustGain = null;
-  }
 }
 
 export const audio = new AudioEngine();
