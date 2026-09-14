@@ -2,12 +2,13 @@ import { Player } from "./Player";
 import { Background } from "./Background";
 import { ParticleSystem } from "./Particles";
 import { ObstacleGenerator } from "./ObstacleGenerator";
-import { checkCollision, drawObstacle, obstacleColorForLevel, updateObstacle, type Obstacle } from "./Obstacle";
+import { checkCollision, drawObstacle, updateObstacle, type Obstacle } from "./Obstacle";
 import { InputManager } from "./Input";
 import { audio } from "./Audio";
 import { save } from "./Storage";
 import { getSkin } from "./Skins";
-import { clamp, createRng } from "./utils";
+import { themeForLevel } from "./Levels";
+import { clamp, createRng, lerpColor } from "./utils";
 
 export const VIRTUAL_HEIGHT = 720;
 
@@ -26,6 +27,8 @@ export interface HudState {
   coins: number;
   best: number;
   level: number;
+  levelName: string;
+  levelColor: string;
   shieldTime: number;
   magnetTime: number;
   multiplierTime: number;
@@ -41,7 +44,7 @@ const BUFF_DURATION = {
   slowmo: 4,
 } as const;
 const SLOWMO_FACTOR = 0.55; // how much slower the world scrolls while active
-const LEVEL_DISTANCE = 1000; // world px of travel per level - drives the HUD readout and the obstacle color theme
+const LEVEL_SCORE = 1000; // score per level - drives the HUD readout and the world's color theme
 
 const MAX_DT = 1 / 30; // clamp huge frame gaps (tab backgrounded) so physics never "teleports"
 
@@ -66,6 +69,7 @@ export class Game {
   private starsThisRun = 0;
   private scrollSpeed = 300;
   private level = 1;
+  private obstacleColor = themeForLevel(1).accent; // eased toward the current level's theme each frame, not snapped
   private time = 0;
   private shakeTime = 0;
   private shakeMag = 0;
@@ -135,6 +139,7 @@ export class Game {
     this.starsThisRun = 0;
     this.scrollSpeed = 300;
     this.level = 1;
+    this.obstacleColor = themeForLevel(1).accent;
     this.shieldTime = 0;
     this.magnetTime = 0;
     this.multiplierTime = 0;
@@ -203,11 +208,14 @@ export class Game {
     this.render();
 
     if (this.state === "playing") {
+      const theme = themeForLevel(this.level);
       this.onHud?.({
         score: this.currentScore(),
         coins: save.get().totalCoins + this.coinsThisRun,
         best: save.get().bestScore,
         level: this.level,
+        levelName: theme.name,
+        levelColor: theme.accent,
         shieldTime: this.shieldTime,
         magnetTime: this.magnetTime,
         multiplierTime: this.multiplierTime,
@@ -231,7 +239,6 @@ export class Game {
 
     this.distance += worldSpeed * dt;
     this.scrollSpeed = this.generator.scrollSpeedAt(this.distance);
-    this.background.update(dt, worldSpeed, this.distance / 7000);
 
     this.player.update(dt, thrustUp, thrustDown, VIRTUAL_HEIGHT, worldSpeed);
     this.player.shieldActive = this.shieldTime > 0;
@@ -266,7 +273,12 @@ export class Game {
     // Drop obstacles once they've fully scrolled past the left edge of the viewport
     this.obstacles = this.obstacles.filter((o) => o.x + o.width / 2 > -50);
 
-    this.level = Math.floor(this.distance / LEVEL_DISTANCE) + 1;
+    this.level = Math.floor(this.currentScore() / LEVEL_SCORE) + 1;
+    const theme = themeForLevel(this.level);
+    // Ease the obstacle color toward the new theme rather than snapping, to
+    // match the sky's own crossfade below.
+    this.obstacleColor = lerpColor(this.obstacleColor, theme.accent, Math.min(1, dt * 2));
+    this.background.update(dt, worldSpeed, theme.hue);
   }
 
   private handleCrash() {
@@ -380,9 +392,8 @@ export class Game {
 
     this.background.draw(ctx, this.worldWidth, VIRTUAL_HEIGHT, this.time);
 
-    const obstacleColor = obstacleColorForLevel(this.level);
     for (const o of this.obstacles) {
-      drawObstacle(ctx, o, VIRTUAL_HEIGHT, this.time, obstacleColor);
+      drawObstacle(ctx, o, VIRTUAL_HEIGHT, this.time, this.obstacleColor);
     }
 
     this.particles.draw(ctx);

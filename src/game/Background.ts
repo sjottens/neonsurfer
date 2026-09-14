@@ -31,14 +31,15 @@ export class Background {
     }
   }
 
-  update(dt: number, scrollSpeed: number, difficulty: number) {
+  update(dt: number, scrollSpeed: number, targetHue: number) {
     this.gridOffset = (this.gridOffset + scrollSpeed * dt * 0.5) % 48;
     for (const s of this.stars) {
       s.x -= s.speed * dt;
       if (s.x < -4) s.x += 2000;
     }
-    // Slowly rotate the palette hue with difficulty for a sense of escalating intensity
-    this.hue = 255 + Math.sin(difficulty * 0.4) * 40;
+    // Ease toward the current level's hue rather than snapping to it, so a
+    // level-up grades the whole sky into its new palette instead of cutting.
+    this.hue += (targetHue - this.hue) * Math.min(1, dt * 1.5);
   }
 
   draw(ctx: CanvasRenderingContext2D, width: number, height: number, time: number) {
@@ -61,11 +62,13 @@ export class Background {
     }
     ctx.globalAlpha = 1;
 
-    // horizon glow band
+    // horizon glow band - tinted to the current level's hue, like a sunset
+    // color that shifts per world; the grid floor below stays a steady
+    // cyan regardless, so it keeps reading as a fixed structure to steer by.
     const horizonY = height * 0.62;
     const glow = ctx.createLinearGradient(0, horizonY - 60, 0, horizonY + 40);
-    glow.addColorStop(0, "rgba(255,47,214,0)");
-    glow.addColorStop(1, "rgba(255,47,214,0.35)");
+    glow.addColorStop(0, `hsla(${this.hue}, 100%, 60%, 0)`);
+    glow.addColorStop(1, `hsla(${this.hue}, 100%, 60%, 0.35)`);
     ctx.fillStyle = glow;
     ctx.fillRect(0, horizonY - 60, width, 100);
 

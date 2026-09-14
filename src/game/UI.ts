@@ -151,7 +151,7 @@ export class UI {
     if (scoreEl) scoreEl.textContent = formatNumber(hud.score);
     if (coinsEl) coinsEl.textContent = `🪙 ${formatNumber(hud.coins)}`;
     if (levelEl) levelEl.textContent = `LVL ${hud.level}`;
-    if (hud.level > this.lastLevel) this.showLevelUpToast(hud.level);
+    if (hud.level > this.lastLevel) this.showLevelUpToast(hud.level, hud.levelName, hud.levelColor);
     this.lastLevel = hud.level;
 
     const buffsEl = this.hudEl.querySelector("#hud-buffs");
@@ -169,11 +169,13 @@ export class UI {
     }
   }
 
-  /** Brief center-screen "LEVEL N" callout - no sound, just a visual beat as obstacle colors shift. */
-  private showLevelUpToast(level: number) {
+  /** Brief center-screen "LEVEL N" callout naming the new world - no sound, just a visual beat as the palette shifts. */
+  private showLevelUpToast(level: number, name: string, color: string) {
     const toast = document.createElement("div");
     toast.className = "level-toast";
-    toast.textContent = `LEVEL ${level}`;
+    toast.style.color = color;
+    toast.style.textShadow = `0 0 10px ${color}, 0 0 30px ${color}`;
+    toast.innerHTML = `LEVEL ${level}<span class="level-toast-name">${name}</span>`;
     this.root.appendChild(toast);
     toast.addEventListener("animationend", () => toast.remove());
   }

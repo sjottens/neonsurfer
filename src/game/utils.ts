@@ -55,3 +55,14 @@ export function withAlpha(hex: string, alpha: number): string {
   const b = num & 0xff;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
+/** Blend two "#rrggbb" colors, t in 0..1 - used to ease a color toward a new level's theme instead of snapping to it. */
+export function lerpColor(a: string, b: string, t: number): string {
+  const na = Number.parseInt(a.slice(1), 16);
+  const nb = Number.parseInt(b.slice(1), 16);
+  const mix = (shift: number) => Math.round(lerp((na >> shift) & 0xff, (nb >> shift) & 0xff, t));
+  const r = mix(16);
+  const g = mix(8);
+  const bch = mix(0);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + bch).toString(16).slice(1)}`;
+}

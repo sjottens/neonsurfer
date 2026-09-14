@@ -35,20 +35,6 @@ export interface Obstacle {
 
 const THICKNESS_MARGIN = 0; // gap math already accounts for full top/bottom blocks
 
-/** Obstacle color cycles with the level instead of staying pink for the whole run. */
-const LEVEL_THEMES = [
-  "#ff2fd6", // magenta (the original look, level 1)
-  "#00d9ff", // electric blue
-  "#ff9d2e", // amber
-  "#39ff6a", // acid green
-  "#8a5bff", // violet
-  "#ff3b5c", // crimson
-];
-
-export function obstacleColorForLevel(level: number): string {
-  return LEVEL_THEMES[(level - 1) % LEVEL_THEMES.length];
-}
-
 /** Current gap center for animated obstacles, given elapsed age. */
 function currentGapCenter(o: Obstacle): number {
   if (o.kind !== "movingGate") return o.gapCenter;
