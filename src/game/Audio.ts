@@ -98,6 +98,33 @@ class AudioEngine {
     this.tone(400, 0.2, 0.09, "triangle", 0.16);
   }
 
+  /** Quick filtered-noise swish for a steering input - a one-shot, not a held drone. */
+  swoosh() {
+    if (this.muted) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const duration = 0.16;
+    const bufferSize = ctx.sampleRate * duration;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.Q.value = 0.7;
+    filter.frequency.setValueAtTime(1400, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(500, ctx.currentTime + duration);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.1, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    noise.connect(filter);
+    filter.connect(g);
+    g.connect(ctx.destination);
+    noise.start();
+  }
 }
 
 export const audio = new AudioEngine();

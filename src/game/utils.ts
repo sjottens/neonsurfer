@@ -36,3 +36,13 @@ export function formatNumber(n: number): string {
 export function hsl(h: number, s: number, l: number): string {
   return `hsl(${h % 360}, ${s}%, ${l}%)`;
 }
+
+/** Darken (amount > 0) or lighten (amount < 0) a "#rrggbb" color, amount in 0..1. */
+export function darken(hex: string, amount: number): string {
+  const num = Number.parseInt(hex.slice(1), 16);
+  const scale = (channel: number) => clamp(Math.round(channel * (1 - amount)), 0, 255);
+  const r = scale((num >> 16) & 0xff);
+  const g = scale((num >> 8) & 0xff);
+  const b = scale(num & 0xff);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}

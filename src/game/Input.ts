@@ -32,12 +32,12 @@ export class InputManager {
   private handleKeyDown = (e: KeyboardEvent) => {
     if (e.code === "ArrowUp") {
       e.preventDefault();
+      if (!this.keyUp) this.onPress?.();
       this.keyUp = true;
-      this.onPress?.();
     } else if (e.code === "ArrowDown") {
       e.preventDefault();
+      if (!this.keyDown) this.onPress?.();
       this.keyDown = true;
-      this.onPress?.();
     }
   };
   private handleKeyUp = (e: KeyboardEvent) => {

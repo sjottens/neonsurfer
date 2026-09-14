@@ -1,4 +1,4 @@
-import { clamp, damp } from "./utils";
+import { clamp, damp, darken } from "./utils";
 import type { Skin } from "./Skins";
 
 /**
@@ -132,7 +132,7 @@ export class Player {
     const pulse = 1 + Math.sin(time * 6) * 0.08;
     ctx.shadowColor = skin.glow;
     ctx.shadowBlur = 22 * pulse;
-    ctx.fillStyle = skin.core;
+    ctx.fillStyle = darken(skin.core, 0.35);
     ctx.beginPath();
     ctx.moveTo(len, 0); // nose tip
     ctx.quadraticCurveTo(len * 0.75, -wid * 1.05, len * 0.05, -wid); // nose -> shoulder, top rail

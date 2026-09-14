@@ -93,7 +93,9 @@ export class Game {
 
     this.input.attach(canvas);
     this.input.onPress = () => {
-      if (this.state === "playing" && this.startHoldPending) this.startHoldPending = false;
+      if (this.state !== "playing") return;
+      if (this.startHoldPending) this.startHoldPending = false;
+      audio.swoosh();
     };
 
     this.resize();
