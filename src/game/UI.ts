@@ -9,6 +9,7 @@ export class UI {
   private root: HTMLElement;
   private game: Game;
   private hudEl: HTMLElement | null = null;
+  private lastLevel = 1;
 
   constructor(root: HTMLElement, game: Game) {
     this.root = root;
@@ -86,6 +87,7 @@ export class UI {
       <div>
         <div class="hud-score" id="hud-score">0</div>
         <div class="hud-best">BEST ${formatNumber(save.get().bestScore)}</div>
+        <div class="hud-level" id="hud-level">LVL 1</div>
         <div class="hud-buffs" id="hud-buffs"></div>
       </div>
       <div class="hud-top-right">
@@ -95,6 +97,7 @@ export class UI {
     `;
     this.root.appendChild(el);
     this.hudEl = el;
+    this.lastLevel = 1; // fresh run - don't fire a level-up toast on the very first HUD update
     el.querySelector('[data-action="pause"]')?.addEventListener("click", () => {
       audio.uiClick();
       this.game.pause();
@@ -144,8 +147,12 @@ export class UI {
     if (!this.hudEl) return;
     const scoreEl = this.hudEl.querySelector("#hud-score");
     const coinsEl = this.hudEl.querySelector("#hud-coins");
+    const levelEl = this.hudEl.querySelector("#hud-level");
     if (scoreEl) scoreEl.textContent = formatNumber(hud.score);
     if (coinsEl) coinsEl.textContent = `🪙 ${formatNumber(hud.coins)}`;
+    if (levelEl) levelEl.textContent = `LVL ${hud.level}`;
+    if (hud.level > this.lastLevel) this.showLevelUpToast(hud.level);
+    this.lastLevel = hud.level;
 
     const buffsEl = this.hudEl.querySelector("#hud-buffs");
     if (buffsEl) {
@@ -160,6 +167,15 @@ export class UI {
         .map(([kind, icon, time]) => `<span class="buff-badge buff-${kind}">${icon} ${Math.ceil(time)}</span>`)
         .join("");
     }
+  }
+
+  /** Brief center-screen "LEVEL N" callout - no sound, just a visual beat as obstacle colors shift. */
+  private showLevelUpToast(level: number) {
+    const toast = document.createElement("div");
+    toast.className = "level-toast";
+    toast.textContent = `LEVEL ${level}`;
+    this.root.appendChild(toast);
+    toast.addEventListener("animationend", () => toast.remove());
   }
 
   private renderPause() {

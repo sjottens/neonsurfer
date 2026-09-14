@@ -294,6 +294,12 @@ body {
   letter-spacing: 0.1em;
   margin-top: 4px;
 }
+.hud-level {
+  font-size: 11px;
+  color: var(--neon-purple);
+  letter-spacing: 0.1em;
+  margin-top: 2px;
+}
 .hud-coins {
   display: flex;
   align-items: center;
@@ -358,6 +364,40 @@ body {
 }
 .icon-btn:hover {
   background: rgba(125, 252, 255, 0.15);
+}
+
+/* Center-screen "LEVEL N" callout, shown briefly on a level-up. pointer-events
+   stays off so it never eats the tap-zone steering input while it's up. */
+.level-toast {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: "Orbitron", "Arial Narrow", "Segoe UI", sans-serif;
+  font-weight: 900;
+  font-size: clamp(28px, 7vw, 48px);
+  letter-spacing: 0.12em;
+  color: var(--neon-purple);
+  text-shadow: 0 0 10px var(--neon-purple), 0 0 30px var(--neon-purple);
+  pointer-events: none;
+  animation: level-toast 1.6s ease-out forwards;
+}
+@keyframes level-toast {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -40%) scale(0.85);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -60%) scale(1.05);
+  }
 }
 
 .new-best-badge {

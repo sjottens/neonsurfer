@@ -1,4 +1,5 @@
 import type { Player } from "./Player";
+import { darken, withAlpha } from "./utils";
 
 export type ObstacleKind = "gateWalls" | "spikes" | "movingGate" | "rotor";
 export type PickupKind = "coin" | "star" | "shield" | "magnet" | "multiplier" | "slowmo" | null;
@@ -33,6 +34,20 @@ export interface Obstacle {
 }
 
 const THICKNESS_MARGIN = 0; // gap math already accounts for full top/bottom blocks
+
+/** Obstacle color cycles with the level instead of staying pink for the whole run. */
+const LEVEL_THEMES = [
+  "#ff2fd6", // magenta (the original look, level 1)
+  "#00d9ff", // electric blue
+  "#ff9d2e", // amber
+  "#39ff6a", // acid green
+  "#8a5bff", // violet
+  "#ff3b5c", // crimson
+];
+
+export function obstacleColorForLevel(level: number): string {
+  return LEVEL_THEMES[(level - 1) % LEVEL_THEMES.length];
+}
 
 /** Current gap center for animated obstacles, given elapsed age. */
 function currentGapCenter(o: Obstacle): number {
@@ -91,19 +106,19 @@ function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: n
   return Math.hypot(px - cx, py - cy);
 }
 
-export function drawObstacle(ctx: CanvasRenderingContext2D, o: Obstacle, worldHeight: number, time: number) {
+export function drawObstacle(ctx: CanvasRenderingContext2D, o: Obstacle, worldHeight: number, time: number, color: string) {
   const halfW = o.width / 2;
   const left = o.x - halfW;
 
   if (o.kind === "rotor") {
-    drawRotor(ctx, o);
+    drawRotor(ctx, o, color);
   } else {
     const gapCenter = currentGapCenter(o);
     const gapTop = gapCenter - o.gapSize / 2;
     const gapBottom = gapCenter + o.gapSize / 2;
     const jagged = o.kind === "spikes";
-    drawBlock(ctx, left, 0, o.width, gapTop, jagged, "bottom");
-    drawBlock(ctx, left, gapBottom, o.width, worldHeight - gapBottom, jagged, "top");
+    drawBlock(ctx, { x: left, y: 0, w: o.width, h: gapTop }, { jagged, spikeSide: "bottom", color });
+    drawBlock(ctx, { x: left, y: gapBottom, w: o.width, h: worldHeight - gapBottom }, { jagged, spikeSide: "top", color });
   }
 
   if (o.pickup && !o.pickupCollected) {
@@ -111,17 +126,23 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, o: Obstacle, worldHe
   }
 }
 
-function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, jagged: boolean, spikeSide: "top" | "bottom") {
+function drawBlock(
+  ctx: CanvasRenderingContext2D,
+  rect: { x: number; y: number; w: number; h: number },
+  opts: { jagged: boolean; spikeSide: "top" | "bottom"; color: string },
+) {
+  const { x, y, w, h } = rect;
+  const { jagged, spikeSide, color } = opts;
   if (h <= 0) return;
   ctx.save();
-  ctx.shadowColor = "rgba(255, 47, 214, 0.85)";
+  ctx.shadowColor = withAlpha(color, 0.85);
   ctx.shadowBlur = 16;
   const grad = ctx.createLinearGradient(x, y, x + w, y);
   grad.addColorStop(0, "rgba(20, 6, 40, 0.92)");
   grad.addColorStop(0.5, "rgba(60, 12, 90, 0.92)");
   grad.addColorStop(1, "rgba(20, 6, 40, 0.92)");
   ctx.fillStyle = grad;
-  ctx.strokeStyle = "#ff2fd6";
+  ctx.strokeStyle = color;
   ctx.lineWidth = 3;
 
   ctx.beginPath();
@@ -134,7 +155,7 @@ function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
     const dir = spikeSide === "top" ? -1 : 1;
     const spikeCount = Math.max(2, Math.round(w / 26));
     const spikeW = w / spikeCount;
-    ctx.fillStyle = "#ff2fd6";
+    ctx.fillStyle = color;
     ctx.shadowBlur = 20;
     for (let i = 0; i < spikeCount; i++) {
       const sx = x + i * spikeW;
@@ -149,7 +170,7 @@ function drawBlock(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.restore();
 }
 
-function drawRotor(ctx: CanvasRenderingContext2D, o: Obstacle) {
+function drawRotor(ctx: CanvasRenderingContext2D, o: Obstacle, color: string) {
   const angle = o.rotorBaseAngle + o.age * o.rotorSpeed;
   const cx = o.x;
   const cy = o.gapCenter;
@@ -159,9 +180,9 @@ function drawRotor(ctx: CanvasRenderingContext2D, o: Obstacle) {
   const ey2 = cy - Math.sin(angle) * o.rotorLength;
 
   ctx.save();
-  ctx.shadowColor = "#ff2fd6";
+  ctx.shadowColor = color;
   ctx.shadowBlur = 18;
-  ctx.strokeStyle = "#ff6bf0";
+  ctx.strokeStyle = darken(color, -0.25); // lighter blade highlight
   ctx.lineWidth = 10;
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -174,7 +195,7 @@ function drawRotor(ctx: CanvasRenderingContext2D, o: Obstacle) {
   ctx.beginPath();
   ctx.arc(cx, cy, 15, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#ff2fd6";
+  ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(cx, cy, 8, 0, Math.PI * 2);
   ctx.fill();

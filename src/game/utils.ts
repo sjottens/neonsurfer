@@ -46,3 +46,12 @@ export function darken(hex: string, amount: number): string {
   const b = scale(num & 0xff);
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
+
+/** "#rrggbb" -> "rgba(r, g, b, alpha)", for glow/shadow colors that need transparency. */
+export function withAlpha(hex: string, alpha: number): string {
+  const num = Number.parseInt(hex.slice(1), 16);
+  const r = (num >> 16) & 0xff;
+  const g = (num >> 8) & 0xff;
+  const b = num & 0xff;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

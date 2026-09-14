@@ -2,7 +2,7 @@ import { Player } from "./Player";
 import { Background } from "./Background";
 import { ParticleSystem } from "./Particles";
 import { ObstacleGenerator } from "./ObstacleGenerator";
-import { checkCollision, drawObstacle, updateObstacle, type Obstacle } from "./Obstacle";
+import { checkCollision, drawObstacle, obstacleColorForLevel, updateObstacle, type Obstacle } from "./Obstacle";
 import { InputManager } from "./Input";
 import { audio } from "./Audio";
 import { save } from "./Storage";
@@ -25,6 +25,7 @@ export interface HudState {
   score: number;
   coins: number;
   best: number;
+  level: number;
   shieldTime: number;
   magnetTime: number;
   multiplierTime: number;
@@ -40,6 +41,7 @@ const BUFF_DURATION = {
   slowmo: 4,
 } as const;
 const SLOWMO_FACTOR = 0.55; // how much slower the world scrolls while active
+const LEVEL_DISTANCE = 1000; // world px of travel per level - drives the HUD readout and the obstacle color theme
 
 const MAX_DT = 1 / 30; // clamp huge frame gaps (tab backgrounded) so physics never "teleports"
 
@@ -63,10 +65,10 @@ export class Game {
   private coinsThisRun = 0;
   private starsThisRun = 0;
   private scrollSpeed = 300;
+  private level = 1;
   private time = 0;
   private shakeTime = 0;
   private shakeMag = 0;
-  private lastMilestone = 0;
   private rafHandle = 0;
   private lastTimestamp = 0;
   private startHoldPending = false;
@@ -132,7 +134,7 @@ export class Game {
     this.coinsThisRun = 0;
     this.starsThisRun = 0;
     this.scrollSpeed = 300;
-    this.lastMilestone = 0;
+    this.level = 1;
     this.shieldTime = 0;
     this.magnetTime = 0;
     this.multiplierTime = 0;
@@ -205,6 +207,7 @@ export class Game {
         score: this.currentScore(),
         coins: save.get().totalCoins + this.coinsThisRun,
         best: save.get().bestScore,
+        level: this.level,
         shieldTime: this.shieldTime,
         magnetTime: this.magnetTime,
         multiplierTime: this.multiplierTime,
@@ -263,11 +266,7 @@ export class Game {
     // Drop obstacles once they've fully scrolled past the left edge of the viewport
     this.obstacles = this.obstacles.filter((o) => o.x + o.width / 2 > -50);
 
-    const milestoneStep = 500;
-    if (this.distance - this.lastMilestone > milestoneStep) {
-      this.lastMilestone = Math.floor(this.distance / milestoneStep) * milestoneStep;
-      audio.milestone();
-    }
+    this.level = Math.floor(this.distance / LEVEL_DISTANCE) + 1;
   }
 
   private handleCrash() {
@@ -381,8 +380,9 @@ export class Game {
 
     this.background.draw(ctx, this.worldWidth, VIRTUAL_HEIGHT, this.time);
 
+    const obstacleColor = obstacleColorForLevel(this.level);
     for (const o of this.obstacles) {
-      drawObstacle(ctx, o, VIRTUAL_HEIGHT, this.time);
+      drawObstacle(ctx, o, VIRTUAL_HEIGHT, this.time, obstacleColor);
     }
 
     this.particles.draw(ctx);
