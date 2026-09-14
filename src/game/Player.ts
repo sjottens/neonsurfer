@@ -48,7 +48,7 @@ export class Player {
     this.magnetActive = false;
   }
 
-  update(dt: number, thrustUp: boolean, thrustDown: boolean, worldHeight: number) {
+  update(dt: number, thrustUp: boolean, thrustDown: boolean, worldHeight: number, worldSpeed: number) {
     let targetVy = 0;
     if (thrustUp && !thrustDown) targetVy = -PHYSICS.moveSpeed;
     else if (thrustDown && !thrustUp) targetVy = PHYSICS.moveSpeed;
@@ -72,7 +72,13 @@ export class Player {
       this.trail.push({ x: this.x, y: this.y, life: 1 });
       if (this.trail.length > 40) this.trail.shift();
     }
-    for (const p of this.trail) p.life -= dt * 1.6;
+    // The player's screen x never moves - the world scrolls under it instead -
+    // so drift each wake point back at the same speed to leave it behind in
+    // the water, rather than stacking straight up/down under the board.
+    for (const p of this.trail) {
+      p.life -= dt * 1.6;
+      p.x -= worldSpeed * dt;
+    }
     this.trail = this.trail.filter((p) => p.life > 0);
   }
 
@@ -123,23 +129,24 @@ export class Player {
     ctx.rotate(this.angle);
 
     const len = this.radius * 2.6; // nose-to-tail half-length
-    const wid = this.radius * 0.95; // widest half-width, at the shoulder just ahead of center
+    const th = this.radius * 0.4; // half-thickness, deck to bottom - a real board seen edge-on is thin
 
-    // ---- classic shortboard silhouette, lying on its side: rounded nose
-    // (+x, facing the direction of travel), straight-ish parallel rails,
-    // and a straight taper down to a flat squash tail (-x) - no swallowtail
-    // notch, just a real board's tail line. ----
+    // ---- classic shortboard silhouette, seen from the side (the view a
+    // rider on it would actually have): pointed nose (+x, facing the
+    // direction of travel), a thin flat-ish deck and bottom, and a straight
+    // taper down to a flat squash tail (-x) - no swallowtail notch, just a
+    // real board's tail line. ----
     const pulse = 1 + Math.sin(time * 6) * 0.08;
     ctx.shadowColor = skin.glow;
     ctx.shadowBlur = 22 * pulse;
     ctx.fillStyle = darken(skin.core, 0.35);
     ctx.beginPath();
     ctx.moveTo(len, 0); // nose tip
-    ctx.quadraticCurveTo(len * 0.75, -wid * 1.05, len * 0.05, -wid); // nose -> shoulder, top rail
-    ctx.lineTo(-len * 0.92, -wid * 0.32); // straight taper down to the tail, top rail
-    ctx.lineTo(-len * 0.92, wid * 0.32); // flat tail edge, straight across
-    ctx.lineTo(len * 0.05, wid); // tail -> shoulder, bottom rail
-    ctx.quadraticCurveTo(len * 0.75, wid * 1.05, len, 0); // shoulder -> nose, bottom rail
+    ctx.quadraticCurveTo(len * 0.75, -th * 1.6, len * 0.05, -th); // nose -> deck
+    ctx.lineTo(-len * 0.92, -th * 0.7); // flat deck back to the tail
+    ctx.lineTo(-len * 0.92, th * 0.7); // flat tail edge, straight down
+    ctx.lineTo(len * 0.05, th); // tail -> bottom, flat bottom
+    ctx.quadraticCurveTo(len * 0.75, th * 1.6, len, 0); // bottom -> nose
     ctx.closePath();
     ctx.fill();
 
@@ -157,27 +164,27 @@ export class Player {
     ctx.fillStyle = "#ffffff";
     ctx.globalAlpha = 0.8;
     ctx.beginPath();
-    ctx.ellipse(len * 0.4, -wid * 0.35, this.radius * 0.4, this.radius * 0.2, -0.35, 0, Math.PI * 2);
+    ctx.ellipse(len * 0.4, -th * 0.6, this.radius * 0.35, this.radius * 0.12, -0.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // tail fin, trailing underneath
+    // tail fin, trailing below the board - visible from the side
     ctx.shadowBlur = 14;
     ctx.fillStyle = skin.glow;
     ctx.beginPath();
-    ctx.moveTo(-len * 0.62, wid * 0.28);
-    ctx.lineTo(-len * 0.88, wid * 0.85);
-    ctx.lineTo(-len * 0.45, wid * 0.4);
+    ctx.moveTo(-len * 0.62, th * 0.7);
+    ctx.lineTo(-len * 0.85, th * 1.9);
+    ctx.lineTo(-len * 0.45, th * 0.9);
     ctx.closePath();
     ctx.fill();
 
-    // ---- rider: a tiny neon stick-figure standing on the deck. It leans
-    // into whichever way the board is steered and bobs gently at rest, so
-    // it never looks frozen even mid-glide. ----
+    // ---- rider: a tiny neon stick-figure standing on the deck, seen from
+    // the side. It leans into whichever way the board is steered and bobs
+    // gently at rest, so it never looks frozen even mid-glide. ----
     const lean = clamp(this.vy / PHYSICS.moveSpeed, -1, 1); // -1 climbing, +1 diving
     const bob = Math.sin(time * 5) * this.radius * 0.06;
     const standX = len * 0.1; // stance over the board's widest point
-    const hipY = 0;
+    const hipY = -th * 0.9; // feet planted on the deck surface, not the board's centerline
     const shoulderX = standX + lean * this.radius * 0.5; // torso leans into the turn
     const shoulderY = hipY - this.radius * 1.7 + bob;
     const headR = this.radius * 0.3;

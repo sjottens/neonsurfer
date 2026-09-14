@@ -230,7 +230,7 @@ export class Game {
     this.scrollSpeed = this.generator.scrollSpeedAt(this.distance);
     this.background.update(dt, worldSpeed, this.distance / 7000);
 
-    this.player.update(dt, thrustUp, thrustDown, VIRTUAL_HEIGHT);
+    this.player.update(dt, thrustUp, thrustDown, VIRTUAL_HEIGHT, worldSpeed);
     this.player.shieldActive = this.shieldTime > 0;
     this.player.magnetActive = this.magnetTime > 0;
 
