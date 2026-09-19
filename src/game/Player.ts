@@ -20,12 +20,17 @@ export const PHYSICS = {
   halfD: 0.8, // hitbox half-length (front to back)
   coyote: 0.1,
   buffer: 0.14,
+  trickDelay: 0.12, // hold left/right this long in the air before the trick kicks in
+  trickSteer: 0.55, // air steering is reduced while a trick is held - the commitment you trade for the points
 };
+
+export type TrickKind = "grab" | "method";
 
 const UP = new THREE.Vector3(0, 1, 0);
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
+const _d = new THREE.Vector3();
 
 /** Two-bone IK: where the knee/elbow sits so a limb spans hip -> foot, bending toward `bend`. */
 function solveJoint(root: THREE.Vector3, end: THREE.Vector3, l1: number, l2: number, bend: THREE.Vector3, out: THREE.Vector3) {
@@ -74,6 +79,8 @@ function setJoint(m: THREE.Mesh, p: THREE.Vector3, r: number) {
 export interface PlayerEvents {
   onJump?: (fromRamp: boolean) => void;
   onLand?: (impact: number) => void;
+  /** Landed after holding a trick in the air: which one, and for how long (seconds). */
+  onTrick?: (kind: TrickKind, seconds: number) => void;
   onSplash?: (x: number, y: number, z: number, amount: number) => void;
 }
 
@@ -102,6 +109,14 @@ export class Player {
   private crouch = 0.3;
   private armUp = 0;
   private waterY = 0;
+
+  // air tricks: hold left (rail grab) or right (method) while jumping
+  private holdDir: TrickKind | null = null;
+  private holdTime = 0;
+  private trickTime = { grab: 0, method: 0 };
+  private grabBlend = 0;
+  private methodBlend = 0;
+  trick: TrickKind | null = null;
 
   // crash ragdoll
   private riderVel = new THREE.Vector3();
@@ -262,6 +277,10 @@ export class Player {
     this.lean = 0;
     this.crouch = 0.3;
     this.armUp = 0;
+    this.endTrick();
+    this.grabBlend = 0;
+    this.methodBlend = 0;
+    this.board.rotation.set(0, 0, 0);
     this.splashed = false;
     this.board.position.set(0, 0.05, 0);
     this.board.rotation.set(0, 0, 0);
@@ -286,9 +305,33 @@ export class Player {
     this.events.onJump?.(true);
   }
 
+  private endTrick() {
+    this.holdDir = null;
+    this.holdTime = 0;
+    this.trick = null;
+    this.trickTime.grab = 0;
+    this.trickTime.method = 0;
+  }
+
   update(dt: number, steer: number, ground: number, scroll: number, time: number, worldSpeed: number, speedFactor: number) {
+    // ---- air tricks: steering left/right while airborne performs a trick once held for a beat
+    const dir: TrickKind | null = steer < 0 ? "grab" : steer > 0 ? "method" : null;
+    if (!this.grounded && dir) {
+      if (dir === this.holdDir) this.holdTime += dt;
+      else {
+        this.holdDir = dir;
+        this.holdTime = 0;
+      }
+    } else {
+      this.holdDir = null;
+      this.holdTime = 0;
+    }
+    this.trick = this.holdTime > PHYSICS.trickDelay ? this.holdDir : null;
+    if (this.trick) this.trickTime[this.trick] += dt;
+
     // ---- sideways
-    this.vx = damp(this.vx, steer * PHYSICS.latSpeed, PHYSICS.smoothing, dt);
+    const steerScale = this.trick ? PHYSICS.trickSteer : 1;
+    this.vx = damp(this.vx, steer * steerScale * PHYSICS.latSpeed, PHYSICS.smoothing, dt);
     this.x += this.vx * dt;
     if (Math.abs(this.x) > PHYSICS.bound) {
       this.x = clamp(this.x, -PHYSICS.bound, PHYSICS.bound);
@@ -304,6 +347,7 @@ export class Player {
       this.coyote = 0;
       this.buffer = 0;
       this.height = Math.max(this.height, ground) + 0.001;
+      this.endTrick();
       this.events.onJump?.(false);
     }
     if (!this.grounded || this.height > ground + 0.001) {
@@ -316,6 +360,9 @@ export class Player {
         if (!this.grounded) {
           this.grounded = true;
           this.crouch += clamp(impact / 28, 0, 0.55);
+          const { grab, method } = this.trickTime;
+          if (Math.max(grab, method) > 0.2) this.events.onTrick?.(grab >= method ? "grab" : "method", Math.max(grab, method));
+          this.endTrick();
           this.events.onLand?.(impact);
         }
       } else {
@@ -350,13 +397,23 @@ export class Player {
 
     // ---- rider pose
     const airborne = !this.grounded;
-    const crouchTarget = airborne ? (this.vy > 0 ? 0.02 : 0.2) : 0.34 + 0.05 * Math.sin(time * 4) + speedFactor * 0.08 + Math.abs(this.lean) * 0.16;
+    this.grabBlend = damp(this.grabBlend, this.trick === "grab" ? 1 : 0, 0.7, dt);
+    this.methodBlend = damp(this.methodBlend, this.trick === "method" ? 1 : 0, 0.7, dt);
+    const grab = this.grabBlend;
+    const method = this.methodBlend;
+    const baseCrouch = airborne ? (this.vy > 0 ? 0.02 : 0.2) : 0.34 + 0.05 * Math.sin(time * 4) + speedFactor * 0.08 + Math.abs(this.lean) * 0.16;
+    const crouchTarget = baseCrouch + (1.15 - baseCrouch) * grab + (0.5 - baseCrouch) * method;
     this.crouch = damp(this.crouch, crouchTarget, airborne ? 0.7 : 0.82, dt);
     this.armUp = damp(this.armUp, airborne ? 1 : 0, 0.8, dt);
 
+    // method: the board is kicked out to the side; rail grab: it tips toward the grabbing hand.
+    // The feet stay planted on it either way.
+    this.board.rotation.set(0, method * 0.4, -method * 0.75 + grab * 0.22);
+    this.board.position.y = 0.05 + method * 0.12;
+
     const v = this.v;
-    v.footF.set(0, 0.16, -0.42);
-    v.footB.set(0, 0.16, 0.4);
+    v.footF.set(0, 0.11, -0.42).applyEuler(this.board.rotation).add(this.board.position);
+    v.footB.set(0, 0.11, 0.4).applyEuler(this.board.rotation).add(this.board.position);
     const hipY = 1.02 - this.crouch * 0.42;
     v.hipC.set(this.lean * 0.05, hipY, 0);
     v.hipF.copy(v.hipC).add(_c.set(0, 0, -0.13));
@@ -373,7 +430,7 @@ export class Player {
     // torso turned three-quarters away from the camera, leaning into the carve
     const yaw = -1.05 + this.lean * 0.3;
     v.axis.set(Math.cos(yaw) * 0.23, 0, -Math.sin(yaw) * 0.23);
-    v.chest.copy(v.hipC).add(_c.set(this.lean * 0.16, 0.62 - this.crouch * 0.1, -0.06 - this.crouch * 0.12));
+    v.chest.copy(v.hipC).add(_c.set(this.lean * 0.16 - grab * 0.28, 0.62 - this.crouch * 0.1 - grab * 0.3 - method * 0.06, -0.06 - this.crouch * 0.12 + method * 0.4));
     v.shF.copy(v.chest).sub(v.axis);
     v.shB.copy(v.chest).add(v.axis);
     setLimb(this.torso, _b.copy(v.hipC).add(_c.set(0, 0.06, 0)), v.chest, 0.19);
@@ -383,6 +440,16 @@ export class Player {
     const up = this.armUp;
     v.handF.copy(v.shF).add(_c.set(0.3 + this.lean * 0.3, -0.42 + up * 0.75 + sway, -0.5 - up * 0.1));
     v.handB.copy(v.shB).add(_c.set(0.34 + this.lean * 0.3, -0.5 + up * 0.7 - sway, 0.4 + up * 0.05));
+    if (grab > 0.01) {
+      // reach down and grab the rail of the board, just ahead of the front foot
+      _d.set(-0.4, 0.13, -0.2).applyEuler(this.board.rotation).add(this.board.position);
+      v.handF.lerp(_d, grab);
+    }
+    if (method > 0.01) {
+      // arms flung wide, chest open - the classic method-air pose
+      v.handF.lerp(_d.copy(v.shF).add(_c.set(0.2, 0.32, -0.55)), method);
+      v.handB.lerp(_d.copy(v.shB).add(_c.set(0.2, 0.4, 0.5)), method);
+    }
     reach(v.shF, v.handF, 0.6);
     reach(v.shB, v.handB, 0.6);
     solveJoint(v.shF, v.handF, 0.31, 0.3, v.bendArm, v.elbowF);

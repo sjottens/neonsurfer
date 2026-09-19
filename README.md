@@ -35,6 +35,7 @@ On a touch device, on-screen buttons appear: ◀ ▶ on the left, JUMP on the ri
 - **Yellow/black logs** (low) - jump over them. A full-width log *must* be jumped.
 - **White ramps** - ride one and you launch much higher than a normal jump; a coin arc traces the flight.
 - **Shark fins** (later levels) - sweep side to side; time your pass.
+- **Air tricks** - while airborne, hold `←` for a *rail grab* or `→` for a *method*. Land it for points (longer hold = more), but air steering is slower while you hold the trick. Ramps give the most hang time.
 - **Style points** - skim past an obstacle for a *NEAR MISS*, or clear a log for a *CLEAN JUMP*. Chain them within 5 seconds for a growing streak bonus.
 - **Power-ups** - shield (smash through obstacles), magnet, 2x score, slow-mo.
 

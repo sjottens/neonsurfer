@@ -7,7 +7,7 @@ import musicUrl from "../assets/reve.mp3";
  */
 
 /** Music loudness per game situation - the track ducks under the action. */
-const MUSIC_LEVEL = { menu: 0.4, play: 0.55, pause: 0.18, over: 0.3 } as const;
+const MUSIC_LEVEL = { menu: 0.22, play: 0.3, pause: 0.1, over: 0.16 } as const;
 export type MusicMood = keyof typeof MUSIC_LEVEL;
 
 class AudioEngine {

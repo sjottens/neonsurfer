@@ -134,7 +134,7 @@ void main() {
   vec3 col = mix(uFog, uZenith, smoothstep(0.0, 0.55, y));
   float front = smoothstep(-0.2, 1.0, -vDir.z);
   float glow = exp(-abs(y) * 9.0);
-  col += uSun * glow * 0.45 * front;
+  col += uSun * glow * 0.28 * front;
 
   // big synthwave sun sitting on the horizon, sliced by widening gaps
   if (vDir.z < 0.0 && y > 0.0) {
@@ -147,8 +147,8 @@ void main() {
     float t = clamp(-py / R, 0.0, 1.0);
     float stripes = step(t * 0.7, fract(p.y * 26.0));
     disc *= mix(1.0, stripes, step(py, 0.0));
-    col += uSun * exp(-d * 4.0) * 0.22;
-    col = mix(col, uSun * 1.5, disc);
+    col += uSun * exp(-d * 4.0) * 0.1;
+    col = mix(col, uSun * 0.7, disc * 0.9);
   }
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>

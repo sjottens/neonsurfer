@@ -153,6 +153,11 @@ export class Game {
         this.camBump = clamp(impact * 0.012, 0, 0.35);
         this.particles.splash(this.player.x, this.player.waterLevel + 0.2, 0.2, clamp(impact / 16, 0.5, 1.6));
       },
+      onTrick: (kind, seconds) => {
+        if (this.state !== "playing" || this.crashed) return;
+        const base = kind === "grab" ? 20 : 30;
+        this.awardStyle(kind === "grab" ? "RAIL GRAB" : "METHOD", base + Math.min(60, Math.floor(seconds * 40)), "#ff9bf0");
+      },
       onSplash: (x, y, z, amount) => this.particles.splash(x, y + 0.2, z, amount),
     };
 
