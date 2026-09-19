@@ -1,113 +1,77 @@
 /**
- * Direct up/down input across keyboard, mouse, touch and the on-screen
- * mobile buttons - no gravity to fall back on, so both directions need an
- * explicit control:
- *  - Keyboard: Arrow Up / Arrow Down, exclusively (no Space/W/S aliases).
- *  - Mouse/touch on the canvas: hold in the top half of the play field to
- *    rise, the bottom half to dive - the closest touch equivalent to two
- *    arrow keys.
- *  - Dedicated on-screen buttons (left = up, right = down), for mobile -
- *    tracked separately so they don't fight the canvas tap-zone or get
- *    cancelled by an unrelated pointerup elsewhere on screen.
+ * Controls:
+ *  - Keyboard: ArrowLeft / ArrowRight steer, Space jumps.
+ *  - On-screen buttons (touch): left, right and jump - tracked separately from
+ *    the keyboard so an unrelated pointerup elsewhere can't cancel them.
  *
- * `holdingUp`/`holdingDown` are the OR of all three sources.
+ * `steer` is -1 (left) .. +1 (right); holding both cancels out.
  */
 export class InputManager {
-  private keyUp = false;
-  private keyDown = false;
-  private zoneUp = false;
-  private zoneDown = false;
-  private btnUp = false;
-  private btnDown = false;
+  private keyLeft = false;
+  private keyRight = false;
+  private btnLeft = false;
+  private btnRight = false;
 
-  get holdingUp() {
-    return this.keyUp || this.zoneUp || this.btnUp;
-  }
-  get holdingDown() {
-    return this.keyDown || this.zoneDown || this.btnDown;
+  get steer(): number {
+    const left = this.keyLeft || this.btnLeft;
+    const right = this.keyRight || this.btnRight;
+    return (right ? 1 : 0) - (left ? 1 : 0);
   }
 
-  onPress: (() => void) | null = null;
+  /** A steering input just started (for the swoosh sound). */
+  onSteerStart: (() => void) | null = null;
+  /** Jump pressed - fired once per press, never on key auto-repeat. */
+  onJump: (() => void) | null = null;
 
   private handleKeyDown = (e: KeyboardEvent) => {
-    if (e.code === "ArrowUp") {
+    if (e.code === "ArrowLeft") {
       e.preventDefault();
-      if (!this.keyUp) this.onPress?.();
-      this.keyUp = true;
-    } else if (e.code === "ArrowDown") {
+      if (!this.keyLeft) this.onSteerStart?.();
+      this.keyLeft = true;
+    } else if (e.code === "ArrowRight") {
       e.preventDefault();
-      if (!this.keyDown) this.onPress?.();
-      this.keyDown = true;
+      if (!this.keyRight) this.onSteerStart?.();
+      this.keyRight = true;
+    } else if (e.code === "Space") {
+      e.preventDefault(); // also stops a focused button from being "clicked" by the space bar
+      if (!e.repeat) this.onJump?.();
     }
   };
   private handleKeyUp = (e: KeyboardEvent) => {
-    if (e.code === "ArrowUp") this.keyUp = false;
-    else if (e.code === "ArrowDown") this.keyDown = false;
+    if (e.code === "ArrowLeft") this.keyLeft = false;
+    else if (e.code === "ArrowRight") this.keyRight = false;
+    else if (e.code === "Space") e.preventDefault();
   };
 
-  private target: HTMLElement | null = null;
-
-  private handlePointerDown = (e: PointerEvent) => {
-    e.preventDefault();
-    this.applyPointerZone(e);
-    this.onPress?.();
-  };
-  private handlePointerMove = (e: PointerEvent) => {
-    if (e.buttons === 0 && e.pointerType === "mouse") return; // only steer while actually held
-    if (!this.zoneUp && !this.zoneDown) return;
-    this.applyPointerZone(e);
-  };
-  private handlePointerUp = () => {
-    this.zoneUp = false;
-    this.zoneDown = false;
-  };
-
-  private applyPointerZone(e: PointerEvent) {
-    if (!this.target) return;
-    const rect = this.target.getBoundingClientRect();
-    const relativeY = (e.clientY - rect.top) / rect.height;
-    this.zoneUp = relativeY < 0.5;
-    this.zoneDown = relativeY >= 0.5;
+  /** Driven by the on-screen mobile buttons. */
+  setButtonLeft(active: boolean) {
+    if (active && !this.btnLeft) this.onSteerStart?.();
+    this.btnLeft = active;
+  }
+  setButtonRight(active: boolean) {
+    if (active && !this.btnRight) this.onSteerStart?.();
+    this.btnRight = active;
+  }
+  pressJump() {
+    this.onJump?.();
   }
 
-  /** Driven by the on-screen mobile steering buttons. */
-  setButtonUp(active: boolean) {
-    this.btnUp = active;
-    if (active) this.onPress?.();
-  }
-  setButtonDown(active: boolean) {
-    this.btnDown = active;
-    if (active) this.onPress?.();
-  }
-
-  attach(target: HTMLElement) {
-    this.target = target;
+  attach() {
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
-    target.addEventListener("pointerdown", this.handlePointerDown);
-    target.addEventListener("pointermove", this.handlePointerMove);
-    window.addEventListener("pointerup", this.handlePointerUp);
-    window.addEventListener("pointercancel", this.handlePointerUp);
     window.addEventListener("blur", this.reset);
   }
 
-  detach(target: HTMLElement) {
-    this.target = null;
+  detach() {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
-    target.removeEventListener("pointerdown", this.handlePointerDown);
-    target.removeEventListener("pointermove", this.handlePointerMove);
-    window.removeEventListener("pointerup", this.handlePointerUp);
-    window.removeEventListener("pointercancel", this.handlePointerUp);
     window.removeEventListener("blur", this.reset);
   }
 
   reset = () => {
-    this.keyUp = false;
-    this.keyDown = false;
-    this.zoneUp = false;
-    this.zoneDown = false;
-    this.btnUp = false;
-    this.btnDown = false;
+    this.keyLeft = false;
+    this.keyRight = false;
+    this.btnLeft = false;
+    this.btnRight = false;
   };
 }

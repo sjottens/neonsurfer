@@ -187,6 +187,7 @@ body {
   gap: 18px;
   padding: 24px;
   text-align: center;
+  background: radial-gradient(ellipse at center, rgba(5, 1, 15, 0.62) 0%, rgba(5, 1, 15, 0.25) 70%, rgba(5, 1, 15, 0) 100%);
   animation: fadeIn 0.25s ease;
 }
 @keyframes fadeIn {
@@ -259,6 +260,12 @@ body {
   font-size: 13px;
   color: #93a8bd;
   max-width: 320px;
+}
+.hint b {
+  color: #eaf6ff;
+}
+.hint .yellow {
+  color: var(--neon-yellow);
 }
 .hint kbd {
   background: rgba(255, 255, 255, 0.08);
@@ -343,6 +350,10 @@ body {
   color: var(--neon-purple);
 }
 
+.hud-btn-row {
+  display: flex;
+  gap: 8px;
+}
 .hud-top-right {
   display: flex;
   flex-direction: column;
@@ -407,6 +418,77 @@ body {
   100% {
     opacity: 0;
     transform: translate(-50%, -60%) scale(1.05);
+  }
+}
+
+/* Floating style-move callout ("NEAR MISS +10"). */
+.popup {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: "Orbitron", "Arial Narrow", "Segoe UI", sans-serif;
+  font-weight: 800;
+  font-size: clamp(15px, 3.2vw, 24px);
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: popup 1.1s ease-out forwards;
+}
+@keyframes popup {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -20%) scale(0.7);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -140%) scale(1);
+  }
+}
+
+/* On-screen controls reminder for the first few runs. */
+.controls-hint {
+  position: absolute;
+  bottom: 4%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(5, 1, 15, 0.6);
+  border: 1px solid rgba(125, 252, 255, 0.3);
+  font-family: "Orbitron", "Arial Narrow", "Segoe UI", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: #cfe9ff;
+  pointer-events: none;
+  animation: hint-fade 9s ease forwards;
+}
+.controls-hint kbd {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+.controls-hint .sep {
+  opacity: 0.5;
+  margin: 0 4px;
+}
+@keyframes hint-fade {
+  0%, 85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (pointer: coarse) {
+  .controls-hint {
+    display: none;
   }
 }
 
@@ -486,10 +568,10 @@ body {
   }
 }
 
-/* ---------- mobile steering buttons ---------- */
+/* ---------- mobile controls ---------- */
 
 /* Only for touch devices - mouse/keyboard players already have the arrow
-   keys and the tap-zone, so these would just be visual clutter for them. */
+   keys and the space bar, so these would just be visual clutter for them. */
 .steer-buttons {
   display: none;
 }
@@ -508,7 +590,8 @@ body {
   border: 2px solid rgba(125, 252, 255, 0.45);
   background: rgba(5, 1, 15, 0.55);
   color: var(--neon-cyan);
-  font-size: 30px;
+  font-family: "Orbitron", "Arial Narrow", "Segoe UI", sans-serif;
+  font-size: 28px;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -518,17 +601,33 @@ body {
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
-.steer-btn-up {
+.steer-btn-left {
   left: max(20px, env(safe-area-inset-left));
 }
-.steer-btn-down {
+.steer-btn-right {
+  left: calc(max(20px, env(safe-area-inset-left)) + 100px);
+}
+.steer-btn-jump {
   right: max(20px, env(safe-area-inset-right));
+  width: 104px;
+  height: 104px;
+  font-size: 17px;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+  color: var(--neon-yellow);
+  border-color: rgba(255, 232, 115, 0.55);
+  box-shadow: 0 0 18px rgba(255, 232, 115, 0.25);
 }
 .steer-btn.active {
   background: rgba(125, 252, 255, 0.3);
   border-color: var(--neon-cyan);
   box-shadow: 0 0 26px rgba(125, 252, 255, 0.55);
   transform: scale(0.94);
+}
+.steer-btn-jump.active {
+  background: rgba(255, 232, 115, 0.3);
+  border-color: var(--neon-yellow);
+  box-shadow: 0 0 26px rgba(255, 232, 115, 0.55);
 }
 
 /* ---------- rotate-device lock (mobile portrait) ---------- */

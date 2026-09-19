@@ -9,7 +9,15 @@ if (!canvas || !uiRoot) {
   throw new Error("Sjottens: required DOM elements are missing");
 }
 
-const game = new Game(canvas);
+let game: Game;
+try {
+  game = new Game(canvas);
+} catch (err) {
+  // No WebGL (very old browser / blocked GPU) - say so instead of leaving a blank page.
+  console.error(err);
+  uiRoot.innerHTML = `<div class="overlay"><div class="logo" style="font-size: 32px;">NEON SURFER</div><p class="hint">Deze game heeft WebGL nodig, en je browser ondersteunt dat niet (of het staat uit). Probeer een recente versie van Chrome, Edge, Firefox of Safari.</p></div>`;
+  throw err;
+}
 new UI(uiRoot, game);
 
 // Mirrors the (pointer: coarse) + (orientation: portrait) query in

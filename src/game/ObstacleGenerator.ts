@@ -1,162 +1,218 @@
-import type { Obstacle, ObstacleKind, PickupKind } from "./Obstacle";
+import { LANES, LANE_W, laneX, type ObstacleSpec } from "./Obstacle";
+import type { PickupKind, PickupSpec } from "./Pickups";
 import { PHYSICS } from "./Player";
-import { clamp, randRange } from "./utils";
+import { clamp, lerp, randRange } from "./utils";
+
+export interface Row {
+  obstacles: ObstacleSpec[];
+  pickups: PickupSpec[];
+}
+
+type RowType = "solid" | "jump" | "ramp" | "fin";
+
+export const SPAWN_AHEAD = 170; // how far down the track the world is generated
 
 /**
- * Procedural, difficulty-scaled, but always-fair obstacle spawning.
- * "Fair" here means: the gap is always big enough for the player's physics
- * envelope, and consecutive gap centers never jump further than the player
- * could plausibly reach in the time available - no blind-luck walls.
+ * Procedural level design, in "rows" across a five-lane corridor.
  *
- * Two things a flat jump-distance cap alone doesn't catch, both fixed below:
- *  - A `movingGate`/`rotor` doesn't leave the player exactly at its nominal
- *    gap center - they exit wherever they had to be to dodge the moving/
- *    spinning part, which can be well off-center. `lastUncertainty` eats
- *    into the next jump's budget to compensate.
- *  - Two obstacles can still land close together in *time* even when their
- *    centers are a fair distance apart, if the first one is wide. A short
- *    `extraSpacingPending` recovery window follows any dynamic obstacle.
+ * Fairness rules baked in (the whole point of a runner is that a crash is
+ * always your own fault):
+ *  - Every solid row leaves an open window, and that window is always
+ *    reachable from the previous row's window at the surfer's real lateral
+ *    speed and the time actually available.
+ *  - Jump rows (full-width logs) come with generous breathing room after,
+ *    so you've landed and can steer before the next thing arrives.
+ *  - The first rows teach: two easy slalom rows, then a single jump.
+ *  - Difficulty t ramps 0 -> 1: faster, tighter windows, more variety.
  */
 export class ObstacleGenerator {
-  private nextId = 1;
-  private distanceSinceSpawn = 0;
-  private lastGapCenter: number;
-  private lastKind: ObstacleKind | null = null;
-  private lastUncertainty = 0;
-  private extraSpacingPending = 0;
-  private worldHeight: number;
+  private lastD = 0; // track distance of the last generated row
+  private rowIndex = 0;
+  private prevOpen: number[] = [2];
+  private prevGuide = 0;
+  private lastType: RowType = "solid";
+  private extraTime = 0; // recovery time owed after a demanding row
   private rng: () => number;
 
-  constructor(worldHeight: number, rng: () => number) {
-    this.worldHeight = worldHeight;
+  constructor(rng: () => number) {
     this.rng = rng;
-    this.lastGapCenter = worldHeight / 2;
+    this.lastD = 12;
   }
 
-  /** 0 at the start of a run, approaching 1 as the run gets long. */
-  private difficultyAt(distance: number): number {
-    return clamp(distance / 7000, 0, 1);
+  /** 0 at the start of a run, approaching 1 after a couple of minutes. */
+  difficultyAt(distance: number): number {
+    return clamp(distance / 5200, 0, 1);
   }
 
-  scrollSpeedAt(distance: number): number {
-    const t = this.difficultyAt(distance);
-    return 300 + t * 320; // 300 -> 620 px/s
+  speedAt(distance: number): number {
+    return 24 + 26 * this.difficultyAt(distance); // 24 -> 50 units/s
   }
 
-  private gapSizeAt(t: number): number {
-    return 250 - t * 80; // 250 -> 170
+  /** Generate every row that should exist within SPAWN_AHEAD of the surfer. */
+  fill(distance: number): Row[] {
+    const rows: Row[] = [];
+    while (this.lastD < distance + SPAWN_AHEAD) rows.push(this.makeRow());
+    return rows;
   }
 
-  private spacingAt(t: number): number {
-    return 460 - t * 120; // 460 -> 340 (world px between obstacle centers)
-  }
+  private makeRow(): Row {
+    const t = this.difficultyAt(this.lastD);
+    const speed = this.speedAt(this.lastD);
+    const gapTime = lerp(2.0, 1.05, t) + this.extraTime;
+    const spacing = speed * gapTime;
+    const prevD = this.lastD;
+    const D = prevD + spacing;
+    this.lastD = D;
 
-  /** Advance the spawn clock; returns a new Obstacle when one should appear, else null. */
-  step(dt: number, distance: number, scrollSpeed: number, spawnX: number): Obstacle | null {
-    this.distanceSinceSpawn += scrollSpeed * dt;
-    const t = this.difficultyAt(distance);
-    const spacing = this.spacingAt(t) + this.extraSpacingPending;
-    if (this.distanceSinceSpawn < spacing) return null;
-    this.distanceSinceSpawn = 0;
-    this.extraSpacingPending = 0;
+    // how many lanes the surfer can realistically cross in the time between rows
+    const maxShift = Math.max(1, Math.floor(((gapTime - 0.3) * PHYSICS.latSpeed * 0.8) / LANE_W));
 
-    return this.spawn(t, spawnX, spacing);
-  }
+    const type = this.pickType(t);
+    const row: Row = { obstacles: [], pickups: [] };
+    let guide = this.prevGuide;
+    let nextOpen: number[] = [];
+    let extra = 0;
+    let coinLine = true;
 
-  private pickKind(t: number): ObstacleKind {
-    const roll = (): ObstacleKind => {
-      const r = this.rng();
-      if (t < 0.15) return "gateWalls";
-      if (t < 0.4) return r < 0.6 ? "gateWalls" : "spikes";
-      if (t < 0.7) {
-        if (r < 0.4) return "gateWalls";
-        if (r < 0.75) return "spikes";
-        return "movingGate";
+    if (type === "solid") {
+      const openCount = this.openCount(t);
+      const window = this.pickWindow(openCount, maxShift);
+      nextOpen = window;
+      guide = laneX((window[0] + window[window.length - 1]) / 2);
+      for (let lane = 0; lane < LANES; lane++) {
+        if (window.includes(lane)) continue;
+        const jitter = randRange(this.rng, -0.35, 0.35);
+        const dj = randRange(this.rng, -0.8, 0.8);
+        if (t > 0.3 && this.rng() < 0.22) {
+          // a single low log in a blocked lane - a shortcut for players who jump
+          row.obstacles.push({ kind: "log", x: laneX(lane), d: D + dj, span: 1 });
+        } else {
+          row.obstacles.push({ kind: this.rng() < 0.5 ? "buoy" : "rock", x: laneX(lane) + jitter, d: D + dj });
+        }
       }
-      if (r < 0.3) return "spikes";
-      if (r < 0.55) return "movingGate";
-      if (r < 0.75) return "rotor";
-      return "gateWalls";
-    };
-    let kind = roll();
-    // Never chain two of the same dynamic (moving/spinning) obstacle back to
-    // back - one is a fair dodge, two in a row with no breather isn't.
-    if (kind === this.lastKind && (kind === "movingGate" || kind === "rotor")) kind = roll();
-    return kind;
-  }
-
-  private spawn(t: number, spawnX: number, spacing: number): Obstacle {
-    const kind = this.pickKind(t);
-    const gapSize = this.gapSizeAt(t);
-    const margin = gapSize / 2 + 40;
-
-    // How far the player could actually travel (vertically) in the time
-    // between this obstacle and the last one, given their real move speed -
-    // not just a fraction of the world height. `lastUncertainty` shrinks the
-    // budget further when the player's exit position from the previous
-    // obstacle wasn't pinned to its nominal center (see class comment).
-    const scrollSpeed = this.scrollSpeedAt(t * 7000);
-    const reactionTime = spacing / scrollSpeed;
-    const physicsReach = PHYSICS.moveSpeed * reactionTime * 0.72; // safety margin for accel ramp-up + reaction lag
-    const geometryCap = this.worldHeight * (0.3 + 0.15 * (1 - t));
-    const maxJump = Math.max(50, Math.min(geometryCap, physicsReach) - this.lastUncertainty);
-
-    let gapCenter = this.lastGapCenter + randRange(this.rng, -maxJump, maxJump);
-    gapCenter = clamp(gapCenter, margin, this.worldHeight - margin);
-    this.lastGapCenter = gapCenter;
-    this.lastKind = kind;
-
-    const pickupRoll = this.rng();
-    let pickup: PickupKind = null;
-    if (pickupRoll < 0.03) pickup = "shield";
-    else if (pickupRoll < 0.06) pickup = "magnet";
-    else if (pickupRoll < 0.09) pickup = "multiplier";
-    else if (pickupRoll < 0.12) pickup = "slowmo";
-    else if (pickupRoll < 0.24) pickup = "star";
-    else if (pickupRoll < 0.85) pickup = "coin";
-
-    const obstacle: Obstacle = {
-      id: this.nextId++,
-      kind,
-      x: spawnX,
-      width: kind === "spikes" ? 110 : 74,
-      worldHeight: this.worldHeight,
-      age: 0,
-      passed: false,
-      shieldHit: false,
-      pickup,
-      pickupCollected: false,
-      pickupY: gapCenter + randRange(this.rng, -gapSize * 0.15, gapSize * 0.15),
-      pickupOffsetX: 0,
-      pickupOffsetY: 0,
-      gapCenter,
-      gapSize,
-      gapAmplitude: 0,
-      gapSpeed: 0,
-      rotorLength: 0,
-      rotorSpeed: 0,
-      rotorBaseAngle: 0,
-    };
-
-    if (kind === "movingGate") {
-      obstacle.gapAmplitude = Math.min(this.worldHeight * 0.18, gapSize * 0.7);
-      obstacle.gapSpeed = randRange(this.rng, 1.2, 2.2);
-      obstacle.width = 60;
-      this.lastUncertainty = obstacle.gapAmplitude;
-      this.extraSpacingPending = 90;
-    } else if (kind === "rotor") {
-      obstacle.rotorLength = randRange(this.rng, 80, 115);
-      obstacle.rotorSpeed = (this.rng() < 0.5 ? -1 : 1) * randRange(this.rng, 1.2, 1.8 + t * 0.8);
-      obstacle.rotorBaseAngle = randRange(this.rng, 0, Math.PI * 2);
-      obstacle.width = obstacle.rotorLength * 2.2;
-      obstacle.pickup = pickupRoll < 0.5 ? "coin" : null; // keep rotor rows a little less pickup-cluttered
-      obstacle.pickupY = obstacle.gapCenter - obstacle.rotorLength * 1.6;
-      this.lastUncertainty = obstacle.rotorLength * 0.6;
-      this.extraSpacingPending = 130;
+    } else if (type === "jump") {
+      nextOpen = allLanes();
+      extra = 0.4;
+      coinLine = false;
+      row.obstacles.push({ kind: "log", x: 0, d: D, span: LANES });
+      // a coin arc that hangs over the log: pick them up by jumping
+      const arc = [-6, -3, 0, 3, 6];
+      for (const off of arc) {
+        const y = 0.5 + 2.0 * (1 - (off / 7) ** 2);
+        row.pickups.push({ kind: "coin", x: guide, y, d: D + off });
+      }
+      if (this.rng() < 0.18) row.pickups.push({ kind: "star", x: guide, y: 2.9, d: D });
+    } else if (type === "ramp") {
+      const lane = this.pickLane(maxShift);
+      guide = laneX(lane);
+      nextOpen = allLanes();
+      extra = 0.95;
+      coinLine = false;
+      row.obstacles.push({ kind: "ramp", x: guide, d: D });
+      // coins that trace the real launch trajectory at this speed
+      const g = PHYSICS.gravity;
+      for (let i = 0; i < 6; i++) {
+        const tt = 0.16 + i * 0.11;
+        const y = 1.15 + PHYSICS.rampV * tt - 0.5 * g * tt * tt;
+        row.pickups.push({ kind: "coin", x: guide, y: Math.max(0.6, y), d: D + 1.9 + speed * tt });
+      }
+      if (this.rng() < 0.25) row.pickups.push({ kind: "star", x: guide, y: 4.2, d: D + 1.9 + speed * 0.44 });
     } else {
-      this.lastUncertainty = 0;
+      // fin: a shark fin sweeping across the corridor - time your pass
+      nextOpen = allLanes();
+      extra = 0.5;
+      coinLine = false;
+      guide = 0;
+      row.obstacles.push({
+        kind: "fin",
+        x: 0,
+        d: D,
+        amp: 5.5,
+        freq: lerp(1.1, 1.8, t),
+        phase: randRange(this.rng, 0, Math.PI * 2),
+      });
     }
 
-    return obstacle;
+    if (coinLine && this.rowIndex > 0 && this.rng() < 0.78) {
+      // start the line clear of any coin arc the previous row left hanging
+      const startOff = this.lastType === "jump" ? 9.5 : this.lastType === "ramp" ? 5 + speed * 0.8 : 4.5;
+      const n = clamp(Math.floor((spacing - startOff - 5) / 2.6) + 1, 0, 8);
+      const pr = this.rng();
+      let special: PickupKind | null = null;
+      if (pr < 0.03) special = "shield";
+      else if (pr < 0.06) special = "magnet";
+      else if (pr < 0.09) special = "multiplier";
+      else if (pr < 0.12) special = "slowmo";
+      else if (pr < 0.24) special = "star";
+      for (let i = 0; i < n; i++) {
+        const f = n === 1 ? 1 : i / (n - 1);
+        const kind: PickupKind = special && i === Math.floor(n / 2) ? special : "coin";
+        row.pickups.push({ kind, x: lerp(this.prevGuide, guide, f), y: 0.9, d: prevD + startOff + i * 2.6 });
+      }
+    }
+
+    this.prevOpen = nextOpen;
+    this.prevGuide = guide;
+    this.lastType = type;
+    this.extraTime = extra;
+    this.rowIndex++;
+    return row;
   }
+
+  private pickType(t: number): RowType {
+    if (this.rowIndex < 2) return "solid";
+    if (this.rowIndex === 2) return "jump"; // the tutorial jump
+    let jumpP = t < 0.03 ? 0 : 0.2;
+    let rampP = t < 0.12 ? 0 : 0.09;
+    let finP = t < 0.3 ? 0 : 0.12;
+    if (this.lastType === "jump") jumpP = 0;
+    if (this.lastType === "ramp") {
+      rampP = 0;
+      jumpP = 0;
+    }
+    if (this.lastType === "fin") finP = 0;
+    const r = this.rng();
+    if (r < jumpP) return "jump";
+    if (r < jumpP + rampP) return "ramp";
+    if (r < jumpP + rampP + finP) return "fin";
+    return "solid";
+  }
+
+  /** How many contiguous lanes are left open in a solid row. */
+  private openCount(t: number): number {
+    const r = this.rng();
+    if (this.rowIndex < 2 || t < 0.2) return 3;
+    if (t < 0.5) return r < 0.7 ? 2 : 3;
+    if (t < 0.8) return r < 0.6 ? 1 : 2;
+    return r < 0.75 ? 1 : 2;
+  }
+
+  /** Choose a window of `count` contiguous lanes reachable from where the previous row let you through. */
+  private pickWindow(count: number, maxShift: number): number[] {
+    const options: number[][] = [];
+    for (let s = 0; s + count <= LANES; s++) {
+      const w = Array.from({ length: count }, (_, i) => s + i);
+      if (this.reachable(w, maxShift)) options.push(w);
+    }
+    if (options.length === 0) {
+      // can't happen with maxShift >= 1, but never emit an unsolvable row: open the lane nearest the surfer
+      const center = clamp(Math.round(this.prevOpen[0]), 0, LANES - count);
+      return Array.from({ length: count }, (_, i) => center + i);
+    }
+    return options[Math.floor(this.rng() * options.length)];
+  }
+
+  private pickLane(maxShift: number): number {
+    const lanes: number[] = [];
+    for (let l = 0; l < LANES; l++) if (this.reachable([l], maxShift)) lanes.push(l);
+    return lanes.length ? lanes[Math.floor(this.rng() * lanes.length)] : Math.floor(LANES / 2);
+  }
+
+  private reachable(window: number[], maxShift: number): boolean {
+    return window.some((w) => this.prevOpen.some((p) => Math.abs(w - p) <= maxShift));
+  }
+}
+
+function allLanes(): number[] {
+  return Array.from({ length: LANES }, (_, i) => i);
 }

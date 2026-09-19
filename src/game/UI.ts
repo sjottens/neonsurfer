@@ -4,12 +4,15 @@ import { audio } from "./Audio";
 import { formatNumber } from "./utils";
 
 const FIRST_VISIT_KEY = "sjottens:seen-hint";
+const CONTROLS_HINT_RUNS = 3; // show the on-screen controls reminder for the first few runs
+const RETRY_LOCKOUT_MS = 700; // ignore Space/Enter right after a crash so a jump-mash doesn't skip the result screen
 
 export class UI {
   private root: HTMLElement;
   private game: Game;
   private hudEl: HTMLElement | null = null;
   private lastLevel = 1;
+  private gameOverAt = 0;
 
   constructor(root: HTMLElement, game: Game) {
     this.root = root;
@@ -18,8 +21,34 @@ export class UI {
 
     game.onStateChange = (state, payload) => this.render(state, payload);
     game.onHud = (hud) => this.updateHud(hud);
+    game.onPopup = (text, color) => this.showPopup(text, color);
 
+    window.addEventListener("keydown", this.handleKey);
     this.render("menu");
+  }
+
+  /** Global keys: Esc pauses/resumes; Space/Enter starts from the menu or retries after a crash. */
+  private handleKey = (e: KeyboardEvent) => {
+    const state = this.game.currentState;
+    if (e.code === "Escape") {
+      if (state === "playing") this.game.pause();
+      else if (state === "paused") this.game.resume();
+      return;
+    }
+    if (e.repeat || (e.code !== "Space" && e.code !== "Enter")) return;
+    if (state === "menu") {
+      e.preventDefault();
+      this.startRun();
+    } else if (state === "gameover" && performance.now() - this.gameOverAt > RETRY_LOCKOUT_MS) {
+      e.preventDefault();
+      this.startRun();
+    }
+  };
+
+  private startRun() {
+    audio.uiClick();
+    localStorage.setItem(FIRST_VISIT_KEY, "1");
+    this.game.startRun();
   }
 
   private clear() {
@@ -34,7 +63,10 @@ export class UI {
     else if (state === "paused") {
       this.renderHud();
       this.renderPause();
-    } else if (state === "gameover" && payload) this.renderGameOver(payload);
+    } else if (state === "gameover" && payload) {
+      this.gameOverAt = performance.now();
+      this.renderGameOver(payload);
+    }
   }
 
   // ------------------------------------------------------------- screens
@@ -61,18 +93,14 @@ export class UI {
 
       ${
         seenHint
-          ? ""
-          : `<p class="hint">Hold <kbd>↑</kbd> to rise, <kbd>↓</kbd> to dive - or use the on-screen buttons on mobile. Dodge the neon, grab the coins - and watch for the blue star (shield), magnet, 2× and slow-mo power-ups!</p>`
+          ? `<p class="hint"><kbd>←</kbd> <kbd>→</kbd> steer · <kbd>SPACE</kbd> jump</p>`
+          : `<p class="hint">Steer with <kbd>←</kbd> <kbd>→</kbd> and slalom around the <b>rocks &amp; buoys</b>. Hit <kbd>SPACE</kbd> to jump the <b class="yellow">yellow logs</b> - and ride the <b>white ramps</b> for big air. Grab coins, stars and the shield, magnet, 2× and slow-mo power-ups!</p>`
       }
       <p class="credit">100% in je browser · geen account nodig · voortgang lokaal opgeslagen</p>
     `;
     this.root.appendChild(el);
 
-    el.querySelector('[data-action="play"]')?.addEventListener("click", () => {
-      audio.uiClick();
-      localStorage.setItem(FIRST_VISIT_KEY, "1");
-      this.game.startRun();
-    });
+    el.querySelector('[data-action="play"]')?.addEventListener("click", () => this.startRun());
     el.querySelector('[data-action="mute"]')?.addEventListener("click", () => {
       const next = !save.get().muted;
       this.game.setMuted(next);
@@ -91,7 +119,10 @@ export class UI {
         <div class="hud-buffs" id="hud-buffs"></div>
       </div>
       <div class="hud-top-right">
-        <button class="icon-btn" data-action="pause" title="Pause">⏸</button>
+        <div class="hud-btn-row">
+          <button class="icon-btn" data-action="mute" title="Sound">${save.get().muted ? "🔇" : "🔊"}</button>
+          <button class="icon-btn" data-action="pause" title="Pause">⏸</button>
+        </div>
         <div class="hud-coins" id="hud-coins">🪙 0</div>
       </div>
     `;
@@ -102,39 +133,50 @@ export class UI {
       audio.uiClick();
       this.game.pause();
     });
+    el.querySelector('[data-action="mute"]')?.addEventListener("click", (ev) => {
+      const next = !save.get().muted;
+      this.game.setMuted(next);
+      (ev.currentTarget as HTMLElement).textContent = next ? "🔇" : "🔊";
+      (ev.currentTarget as HTMLElement).blur(); // keep Space from re-triggering the button mid-run
+    });
 
-    const escHandler = (e: KeyboardEvent) => {
-      if (e.code === "Escape" && this.game.currentState === "playing") this.game.pause();
-    };
-    window.addEventListener("keydown", escHandler);
+    if (save.get().runsPlayed < CONTROLS_HINT_RUNS && this.game.currentState === "playing") {
+      const hint = document.createElement("div");
+      hint.className = "controls-hint";
+      hint.innerHTML = `<kbd>←</kbd> <kbd>→</kbd> steer <span class="sep">·</span> <kbd>SPACE</kbd> jump the yellow logs`;
+      this.root.appendChild(hint);
+      hint.addEventListener("animationend", () => hint.remove());
+    }
 
     this.renderSteerButtons();
   }
 
   /**
-   * Dedicated mobile steering buttons: left = up, right = down. Shown only
-   * on touch devices (see the `(pointer: coarse)` gate in styles.css) -
-   * mouse/keyboard players keep using the arrow keys / tap-zone instead.
+   * Touch controls: ◀ ▶ on the left thumb, JUMP on the right. Shown only on
+   * touch devices (see the `(pointer: coarse)` gate in styles.css) -
+   * mouse/keyboard players use the arrow keys and space bar instead.
    */
   private renderSteerButtons() {
     const wrap = document.createElement("div");
     wrap.className = "steer-buttons";
     wrap.innerHTML = `
-      <button class="steer-btn steer-btn-up" data-dir="up" aria-label="Omhoog">▲</button>
-      <button class="steer-btn steer-btn-down" data-dir="down" aria-label="Omlaag">▼</button>
+      <button class="steer-btn steer-btn-left" data-dir="left" aria-label="Links">◀</button>
+      <button class="steer-btn steer-btn-right" data-dir="right" aria-label="Rechts">▶</button>
+      <button class="steer-btn steer-btn-jump" data-dir="jump" aria-label="Spring">JUMP</button>
     `;
     this.root.appendChild(wrap);
 
     for (const btn of wrap.querySelectorAll<HTMLButtonElement>(".steer-btn")) {
-      const dir = btn.dataset.dir === "up" ? "up" : "down";
+      const dir = btn.dataset.dir as "left" | "right" | "jump";
       const press = (e: Event) => {
         e.preventDefault();
         btn.classList.add("active");
-        this.game.setSteerButton(dir, true);
+        if (dir === "jump") this.game.pressJumpButton();
+        else this.game.setSteerButton(dir, true);
       };
       const release = () => {
         btn.classList.remove("active");
-        this.game.setSteerButton(dir, false);
+        if (dir !== "jump") this.game.setSteerButton(dir, false);
       };
       btn.addEventListener("pointerdown", press);
       btn.addEventListener("pointerup", release);
@@ -180,6 +222,18 @@ export class UI {
     toast.addEventListener("animationend", () => toast.remove());
   }
 
+  /** Small floating callout for style moves ("NEAR MISS +10", "CLEAN JUMP +15 ×3"). */
+  private showPopup(text: string, color: string) {
+    if (this.game.currentState !== "playing") return;
+    const el = document.createElement("div");
+    el.className = "popup";
+    el.style.color = color;
+    el.style.textShadow = `0 0 8px ${color}, 0 0 20px ${color}`;
+    el.textContent = text;
+    this.root.appendChild(el);
+    el.addEventListener("animationend", () => el.remove());
+  }
+
   private renderPause() {
     const el = document.createElement("div");
     el.className = "overlay";
@@ -200,21 +254,13 @@ export class UI {
       audio.uiClick();
       this.game.goToMenu();
     });
-
-    const escHandler = (e: KeyboardEvent) => {
-      if (e.code === "Escape") {
-        window.removeEventListener("keydown", escHandler);
-        this.game.resume();
-      }
-    };
-    window.addEventListener("keydown", escHandler);
   }
 
   private renderGameOver(result: RunResult) {
     const el = document.createElement("div");
     el.className = "overlay";
     el.innerHTML = `
-      <div class="logo" style="font-size: 34px; color: var(--neon-pink); text-shadow:0 0 8px var(--neon-pink),0 0 26px var(--neon-pink);">CRASHED</div>
+      <div class="logo" style="font-size: 34px; color: var(--neon-pink); text-shadow:0 0 8px var(--neon-pink),0 0 26px var(--neon-pink);">WIPEOUT!</div>
       ${result.isNewBest ? `<div class="new-best-badge">🏆 NEW BEST SCORE!</div>` : ""}
 
       <div class="menu-stats">
@@ -227,13 +273,11 @@ export class UI {
         <button class="neon-btn" data-action="retry">↻ PLAY AGAIN</button>
         <button class="neon-btn secondary" data-action="menu">☰ Menu</button>
       </div>
+      <p class="hint"><kbd>SPACE</kbd> to go again</p>
     `;
     this.root.appendChild(el);
 
-    el.querySelector('[data-action="retry"]')?.addEventListener("click", () => {
-      audio.uiClick();
-      this.game.startRun();
-    });
+    el.querySelector('[data-action="retry"]')?.addEventListener("click", () => this.startRun());
     el.querySelector('[data-action="menu"]')?.addEventListener("click", () => {
       audio.uiClick();
       this.game.goToMenu();

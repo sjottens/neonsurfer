@@ -1,14 +1,56 @@
+import musicUrl from "../assets/reve.mp3";
+
 /**
- * All sound in Sjottens is synthesized with the Web Audio API - no audio
- * files to fetch, nothing to preload, zero bytes of asset weight.
+ * Sound effects are synthesized with the Web Audio API (nothing to fetch);
+ * the background track is the bundled mp3, streamed through a looping
+ * <audio> element so the 7 MB file never has to be decoded up front.
  */
+
+/** Music loudness per game situation - the track ducks under the action. */
+const MUSIC_LEVEL = { menu: 0.4, play: 0.55, pause: 0.18, over: 0.3 } as const;
+export type MusicMood = keyof typeof MUSIC_LEVEL;
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private muted = false;
+  private music: HTMLAudioElement | null = null;
+  private musicVolume = 0;
+  private musicTarget: number = MUSIC_LEVEL.menu;
+  private musicWanted = false;
 
   setMuted(muted: boolean) {
     this.muted = muted;
+    if (this.music) this.music.muted = muted;
+  }
+
+  /** Start the soundtrack. Must be called from a user gesture (a click/key) so the browser allows playback. */
+  startMusic() {
+    this.musicWanted = true;
+    if (!this.music) {
+      const el = new Audio(musicUrl);
+      el.loop = true;
+      el.preload = "auto";
+      el.volume = 0;
+      el.muted = this.muted;
+      this.music = el;
+      document.addEventListener("visibilitychange", () => {
+        if (!this.music || !this.musicWanted) return;
+        if (document.hidden) this.music.pause();
+        else this.music.play().catch(() => {});
+      });
+    }
+    this.music.play().catch(() => {});
+  }
+
+  setMusicMood(mood: MusicMood) {
+    this.musicTarget = MUSIC_LEVEL[mood];
+  }
+
+  /** Ease the music volume toward its target; call once per frame. */
+  update(dt: number) {
+    if (!this.music) return;
+    this.musicVolume += (this.musicTarget - this.musicVolume) * Math.min(1, dt * 2.5);
+    this.music.volume = Math.max(0, Math.min(1, this.musicVolume));
   }
 
   private getContext(): AudioContext | null {
@@ -115,6 +157,80 @@ class AudioEngine {
     this.tone(659.25, 0.12, 0.08, "triangle", 0.08);
   }
 
+  /** Springy take-off: a quick upward glide. */
+  jump(big = false) {
+    if (this.muted) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(big ? 260 : 320, t0);
+    osc.frequency.exponentialRampToValueAtTime(big ? 980 : 720, t0 + 0.2);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(0.13, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.26);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 0.3);
+    this.swoosh(0.7);
+  }
+
+  /** Landing on the water: a soft thump plus a spray of noise. Louder for harder landings (impact ~ 0..30). */
+  land(impact: number) {
+    if (this.muted) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const amount = Math.max(0.25, Math.min(1, impact / 22));
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(150, t0);
+    osc.frequency.exponentialRampToValueAtTime(48, t0 + 0.16);
+    g.gain.setValueAtTime(0.28 * amount, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 0.22);
+    this.swoosh(0.5 * amount + 0.2);
+  }
+
+  /** Bright two-note ping for a near miss / clean jump bonus. */
+  bonus() {
+    this.tone(784, 0.1, 0.09, "triangle");
+    this.tone(1175, 0.16, 0.09, "triangle", 0.06);
+  }
+
+  /** A shielded hit smashing through an obstacle. */
+  shatter() {
+    if (this.muted) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
+    const dur = 0.25;
+    const size = Math.floor(ctx.sampleRate * dur);
+    const buffer = ctx.createBuffer(1, size, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < size; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / size);
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const f = ctx.createBiquadFilter();
+    f.type = "highpass";
+    f.frequency.value = 900;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.3, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    noise.connect(f);
+    f.connect(g);
+    g.connect(ctx.destination);
+    noise.start(t0);
+    this.tone(220, 0.18, 0.12, "square");
+  }
+
   uiClick() {
     this.tone(440, 0.06, 0.06, "square");
   }
@@ -137,7 +253,7 @@ class AudioEngine {
    * soft swell-in envelope and a filter that sweeps across a wide, low range
    * so the noise itself seems to move past, like air being carved.
    */
-  swoosh() {
+  swoosh(volume = 1) {
     if (this.muted) return;
     const ctx = this.getContext();
     if (!ctx) return;
@@ -158,7 +274,7 @@ class AudioEngine {
 
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(0.16, t0 + 0.06); // swell in, no hard hi-hat transient
+    g.gain.linearRampToValueAtTime(0.16 * volume, t0 + 0.06); // swell in, no hard hi-hat transient
     g.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
 
     noise.connect(filter);

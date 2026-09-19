@@ -1,7 +1,7 @@
 {
   "name": "sjottens",
   "version": "1.0.0",
-  "description": "Sjottens - a neon arcade glider game. 100% client-side, no login, no server.",
+  "description": "Sjottens (Neon Surfer) - a 3D neon surfing runner built with three.js. 100% client-side, no login, no server.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,11 @@
     "preview": "vite preview --port 5174"
   },
   "devDependencies": {
+    "@types/three": "^0.186.0",
     "typescript": "^5.3.3",
     "vite": "^8.3.0"
+  },
+  "dependencies": {
+    "three": "^0.186.0"
   }
 }
