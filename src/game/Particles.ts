@@ -154,7 +154,7 @@ export class ParticleSystem {
         vy: (2.5 + Math.random() * 4) * Math.sqrt(amount),
         vz: Math.sin(a) * s,
         life: 0.6 + Math.random() * 0.4,
-        size: 0.32 + Math.random() * 0.3,
+        size: 0.15 + Math.random() * 0.15,
         sizeEnd: 0.05,
         color: "#cfefff",
         alpha: 0.8,

@@ -23,7 +23,7 @@ Open the printed local URL (default `http://localhost:5174`).
 | Control | Action |
 | --- | --- |
 | `←` / `→` | steer left / right |
-| `Space` | jump |
+| `Space` | jump - hold it in the air for a trick |
 | `Esc` | pause |
 | `Space` / `Enter` | start from the menu / play again after a wipeout |
 
@@ -35,7 +35,7 @@ On a touch device, on-screen buttons appear: ◀ ▶ on the left, JUMP on the ri
 - **Yellow/black logs** (low) - jump over them. A full-width log *must* be jumped.
 - **White ramps** - ride one and you launch much higher than a normal jump; a coin arc traces the flight.
 - **Shark fins** (later levels) - sweep side to side; time your pass.
-- **Air tricks** - while airborne, hold `←` for a *rail grab* or `→` for a *method*. Land it for points (longer hold = more), but air steering is slower while you hold the trick. Ramps give the most hang time.
+- **Air tricks** - while airborne, *hold* `Space`: you pull a *method*, or a *rail grab* if you also hold `←`. Land it for points (longer hold = more), but you can't steer for as long as you hold it. Ramps give the most hang time.
 - **Style points** - skim past an obstacle for a *NEAR MISS*, or clear a log for a *CLEAN JUMP*. Chain them within 5 seconds for a growing streak bonus.
 - **Power-ups** - shield (smash through obstacles), magnet, 2x score, slow-mo.
 
@@ -54,6 +54,7 @@ On a touch device, on-screen buttons appear: ◀ ▶ on the left, JUMP on the ri
   that is reachable from the previous one at the surfer's real steering speed,
   jump rows come with recovery time, and the first rows teach the mechanics.
   Difficulty, speed and obstacle variety ramp up with distance.
+- **Wake** (`Wake.ts`): a ribbon that follows the path the board carved, with lace-like foam anchored in water space, plus fine spray particles.
 - **Post-processing**: bloom for the neon look, with automatic quality
   fallback (bloom off, then lower resolution) if the device can't keep up.
 - **Audio** (`Audio.ts`): sound effects are synthesized with the Web Audio API;

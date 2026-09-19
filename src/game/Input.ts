@@ -11,6 +11,13 @@ export class InputManager {
   private keyRight = false;
   private btnLeft = false;
   private btnRight = false;
+  private keyJump = false;
+  private btnJump = false;
+
+  /** Jump is being held (space bar or the on-screen button) - in the air this performs a trick. */
+  get jumpHeld(): boolean {
+    return this.keyJump || this.btnJump;
+  }
 
   get steer(): number {
     const left = this.keyLeft || this.btnLeft;
@@ -34,13 +41,17 @@ export class InputManager {
       this.keyRight = true;
     } else if (e.code === "Space") {
       e.preventDefault(); // also stops a focused button from being "clicked" by the space bar
+      this.keyJump = true;
       if (!e.repeat) this.onJump?.();
     }
   };
   private handleKeyUp = (e: KeyboardEvent) => {
     if (e.code === "ArrowLeft") this.keyLeft = false;
     else if (e.code === "ArrowRight") this.keyRight = false;
-    else if (e.code === "Space") e.preventDefault();
+    else if (e.code === "Space") {
+      e.preventDefault();
+      this.keyJump = false;
+    }
   };
 
   /** Driven by the on-screen mobile buttons. */
@@ -54,6 +65,9 @@ export class InputManager {
   }
   pressJump() {
     this.onJump?.();
+  }
+  setButtonJump(active: boolean) {
+    this.btnJump = active;
   }
 
   attach() {
@@ -73,5 +87,7 @@ export class InputManager {
     this.keyRight = false;
     this.btnLeft = false;
     this.btnRight = false;
+    this.keyJump = false;
+    this.btnJump = false;
   };
 }

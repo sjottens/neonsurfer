@@ -10,7 +10,9 @@ export interface Row {
 
 type RowType = "solid" | "jump" | "ramp" | "fin";
 
-export const SPAWN_AHEAD = 170; // how far down the track the world is generated
+export const SPEED_MIN = 30; // units/s at the start of a run
+export const SPEED_MAX = 62; // units/s at full difficulty
+export const SPAWN_AHEAD = 190; // how far down the track the world is generated
 
 /**
  * Procedural level design, in "rows" across a five-lane corridor.
@@ -41,11 +43,11 @@ export class ObstacleGenerator {
 
   /** 0 at the start of a run, approaching 1 after a couple of minutes. */
   difficultyAt(distance: number): number {
-    return clamp(distance / 5200, 0, 1);
+    return clamp(distance / 6500, 0, 1);
   }
 
   speedAt(distance: number): number {
-    return 24 + 26 * this.difficultyAt(distance); // 24 -> 50 units/s
+    return lerp(SPEED_MIN, SPEED_MAX, this.difficultyAt(distance));
   }
 
   /** Generate every row that should exist within SPAWN_AHEAD of the surfer. */

@@ -93,8 +93,8 @@ export class UI {
 
       ${
         seenHint
-          ? `<p class="hint"><kbd>←</kbd> <kbd>→</kbd> steer · <kbd>SPACE</kbd> jump · in the air: <kbd>←</kbd> grab, <kbd>→</kbd> method</p>`
-          : `<p class="hint">Steer with <kbd>←</kbd> <kbd>→</kbd> and slalom around the <b>rocks &amp; buoys</b>. Hit <kbd>SPACE</kbd> to jump the <b class="yellow">yellow logs</b> - and ride the <b>white ramps</b> for big air. In the air hold <kbd>←</kbd> for a <b>rail grab</b> or <kbd>→</kbd> for a <b>method</b> to score tricks. Grab coins, stars and the shield, magnet, 2× and slow-mo power-ups!</p>`
+          ? `<p class="hint"><kbd>←</kbd> <kbd>→</kbd> steer · <kbd>SPACE</kbd> jump · hold <kbd>SPACE</kbd> in the air for tricks</p>`
+          : `<p class="hint">Steer with <kbd>←</kbd> <kbd>→</kbd> and slalom around the <b>rocks &amp; buoys</b>. Hit <kbd>SPACE</kbd> to jump the <b class="yellow">yellow logs</b> - and ride the <b>white ramps</b> for big air. In the air <b>hold</b> <kbd>SPACE</kbd> for a <b>method</b> (add <kbd>←</kbd> for a <b>rail grab</b>) - you can't steer while you hold it. Grab coins, stars and the shield, magnet, 2× and slow-mo power-ups!</p>`
       }
       <p class="credit">100% in je browser · geen account nodig · voortgang lokaal opgeslagen</p>
     `;
@@ -143,7 +143,7 @@ export class UI {
     if (save.get().runsPlayed < CONTROLS_HINT_RUNS && this.game.currentState === "playing") {
       const hint = document.createElement("div");
       hint.className = "controls-hint";
-      hint.innerHTML = `<kbd>←</kbd> <kbd>→</kbd> steer <span class="sep">·</span> <kbd>SPACE</kbd> jump <span class="sep">·</span> in the air <kbd>←</kbd> grab <kbd>→</kbd> method`;
+      hint.innerHTML = `<kbd>←</kbd> <kbd>→</kbd> steer <span class="sep">·</span> <kbd>SPACE</kbd> jump <span class="sep">·</span> hold <kbd>SPACE</kbd> in the air = trick`;
       this.root.appendChild(hint);
       hint.addEventListener("animationend", () => hint.remove());
     }
@@ -171,12 +171,15 @@ export class UI {
       const press = (e: Event) => {
         e.preventDefault();
         btn.classList.add("active");
-        if (dir === "jump") this.game.pressJumpButton();
-        else this.game.setSteerButton(dir, true);
+        if (dir === "jump") {
+          this.game.pressJumpButton();
+          this.game.setJumpButton(true);
+        } else this.game.setSteerButton(dir, true);
       };
       const release = () => {
         btn.classList.remove("active");
-        if (dir !== "jump") this.game.setSteerButton(dir, false);
+        if (dir === "jump") this.game.setJumpButton(false);
+        else this.game.setSteerButton(dir, false);
       };
       btn.addEventListener("pointerdown", press);
       btn.addEventListener("pointerup", release);

@@ -10,7 +10,7 @@ import type { Skin } from "./Skins";
  * leaving a ledge still fires (coyote time).
  */
 export const PHYSICS = {
-  latSpeed: 15, // target sideways speed while steering (units/s)
+  latSpeed: 17, // target sideways speed while steering (units/s)
   smoothing: 0.55, // damp() base - how quickly sideways speed catches up (lower = snappier)
   gravity: 38,
   jumpV: 13.5, // ~2.4 units high, ~0.7 s in the air
@@ -20,8 +20,7 @@ export const PHYSICS = {
   halfD: 0.8, // hitbox half-length (front to back)
   coyote: 0.1,
   buffer: 0.14,
-  trickDelay: 0.12, // hold left/right this long in the air before the trick kicks in
-  trickSteer: 0.55, // air steering is reduced while a trick is held - the commitment you trade for the points
+  trickDelay: 0.12, // hold jump this long in the air before the trick kicks in
 };
 
 export type TrickKind = "grab" | "method";
@@ -110,8 +109,7 @@ export class Player {
   private armUp = 0;
   private waterY = 0;
 
-  // air tricks: hold left (rail grab) or right (method) while jumping
-  private holdDir: TrickKind | null = null;
+  // air tricks: hold jump in the air (+ left for a rail grab, otherwise a method); no steering meanwhile
   private holdTime = 0;
   private trickTime = { grab: 0, method: 0 };
   private grabBlend = 0;
@@ -306,32 +304,22 @@ export class Player {
   }
 
   private endTrick() {
-    this.holdDir = null;
     this.holdTime = 0;
     this.trick = null;
     this.trickTime.grab = 0;
     this.trickTime.method = 0;
   }
 
-  update(dt: number, steer: number, ground: number, scroll: number, time: number, worldSpeed: number, speedFactor: number) {
-    // ---- air tricks: steering left/right while airborne performs a trick once held for a beat
-    const dir: TrickKind | null = steer < 0 ? "grab" : steer > 0 ? "method" : null;
-    if (!this.grounded && dir) {
-      if (dir === this.holdDir) this.holdTime += dt;
-      else {
-        this.holdDir = dir;
-        this.holdTime = 0;
-      }
-    } else {
-      this.holdDir = null;
-      this.holdTime = 0;
-    }
-    this.trick = this.holdTime > PHYSICS.trickDelay ? this.holdDir : null;
+  update(dt: number, steer: number, hold: boolean, ground: number, scroll: number, time: number, worldSpeed: number, speedFactor: number) {
+    // ---- air tricks: hold jump while airborne. The arrows only pick the trick (left = rail grab,
+    // otherwise method) - the surfer stops steering for as long as the trick is held.
+    if (!this.grounded && hold) this.holdTime += dt;
+    else this.holdTime = 0;
+    this.trick = this.holdTime > PHYSICS.trickDelay ? (steer < 0 ? "grab" : "method") : null;
     if (this.trick) this.trickTime[this.trick] += dt;
 
     // ---- sideways
-    const steerScale = this.trick ? PHYSICS.trickSteer : 1;
-    this.vx = damp(this.vx, steer * steerScale * PHYSICS.latSpeed, PHYSICS.smoothing, dt);
+    this.vx = damp(this.vx, this.trick ? 0 : steer * PHYSICS.latSpeed, PHYSICS.smoothing, dt);
     this.x += this.vx * dt;
     if (Math.abs(this.x) > PHYSICS.bound) {
       this.x = clamp(this.x, -PHYSICS.bound, PHYSICS.bound);

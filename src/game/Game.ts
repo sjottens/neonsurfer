@@ -6,7 +6,8 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { Player, PHYSICS } from "./Player";
 import { World } from "./World";
 import { ParticleSystem } from "./Particles";
-import { ObstacleGenerator } from "./ObstacleGenerator";
+import { ObstacleGenerator, SPEED_MAX, SPEED_MIN } from "./ObstacleGenerator";
+import { Wake } from "./Wake";
 import {
   createObstacle,
   obstacleAssets,
@@ -50,7 +51,7 @@ const MAGNET_PULL_SPEED = 42;
 const BUFF_DURATION = { shield: 4, magnet: 5, multiplier: 6, slowmo: 4 } as const;
 const SLOWMO_FACTOR = 0.55; // how much slower the world scrolls while active
 const LEVEL_SCORE = 1000; // score per level - drives the HUD readout and the world's color theme
-const SCORE_PER_UNIT = 1.2; // distance -> score
+const SCORE_PER_UNIT = 1.0; // distance -> score
 const STYLE_WINDOW = 5; // seconds a near-miss / clean-jump streak stays alive
 const CRASH_HITSTOP = 0.12; // freeze-frame on impact
 const CRASH_TO_GAMEOVER = 1.5; // real seconds from impact to the game-over screen
@@ -68,6 +69,7 @@ export class Game {
   private world: World;
   private player = new Player();
   private particles = new ParticleSystem();
+  private wake = new Wake();
   private entities = new THREE.Group();
   private generator: ObstacleGenerator;
   private obstacles: Obstacle[] = [];
@@ -135,7 +137,7 @@ export class Game {
     this.world = new World(this.rng);
     this.generator = new ObstacleGenerator(this.rng);
     const scene = this.world.scene;
-    scene.add(this.player.root, this.entities, this.particles.points);
+    scene.add(this.player.root, this.wake.mesh, this.entities, this.particles.points);
 
     this.composer = new EffectComposer(this.renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
     this.composer.addPass(new RenderPass(scene, this.camera));
@@ -199,7 +201,9 @@ export class Game {
     this.clearEntities();
     this.player.reset();
     this.player.setSkin(getSkin(save.get().equippedSkin));
+    this.wake.setTint(getSkin(save.get().equippedSkin).trail);
     this.particles.clear();
+    this.wake.clear();
     this.distance = 0;
     this.coinsThisRun = 0;
     this.starsThisRun = 0;
@@ -242,6 +246,7 @@ export class Game {
     this.player.reset();
     this.crashed = false;
     this.particles.clear();
+    this.wake.clear();
     this.world.setTheme(themeForLevel(1));
     audio.setMusicMood("menu");
     this.setState("menu");
@@ -354,7 +359,7 @@ export class Game {
 
   /** Attract mode behind the menu: the surfer cruises and hops on an empty sea. */
   private updateMenu(dt: number) {
-    const speed = 13;
+    const speed = 16;
     this.scroll += speed * dt;
     this.speedFactor = 0.1;
     const targetX = Math.sin(this.time * 0.55) * 3;
@@ -363,7 +368,7 @@ export class Game {
       this.menuJumpTimer = 3.5 + Math.random() * 2.5;
       this.player.requestJump();
     }
-    this.player.update(dt, clamp((targetX - this.player.x) * 0.7, -1, 1), 0, this.scroll, this.time, speed, 0.1);
+    this.player.update(dt, clamp((targetX - this.player.x) * 0.7, -1, 1), false, 0, this.scroll, this.time, speed, 0.1);
     this.emitWake(dt);
     this.world.update(dt, this.scroll, speed, this.time, this.camera, this.speedFactor);
     obstacleAssets.accent.copy(this.world.palette.accent);
@@ -379,7 +384,7 @@ export class Game {
     // Slow-mo eases the world, never the surfer's own steering - a breather, not a bullet-time cheat.
     const speed = this.generator.speedAt(this.distance);
     const worldSpeed = this.slowmoTime > 0 ? speed * SLOWMO_FACTOR : speed;
-    this.speedFactor = clamp((speed - 24) / 26, 0, 1);
+    this.speedFactor = clamp((speed - SPEED_MIN) / (SPEED_MAX - SPEED_MIN), 0, 1);
     this.distance += worldSpeed * dt;
     this.scroll += worldSpeed * dt;
     this.spawnRows();
@@ -414,7 +419,7 @@ export class Game {
 
     // ---- the surfer
     const steer = this.input.steer;
-    this.player.update(dt, steer, ground, this.scroll, this.time, worldSpeed, this.speedFactor);
+    this.player.update(dt, steer, this.input.jumpHeld, ground, this.scroll, this.time, worldSpeed, this.speedFactor);
     this.player.setBuffs(this.shieldTime > 0, this.magnetTime > 0);
     const px = this.player.x;
 
@@ -621,6 +626,7 @@ export class Game {
       updatePickup(p, this.time);
     }
     this.player.pose(dt, this.scroll, this.time, this.crashSpeed, this.speedFactor, 0);
+    this.emitWake(dt);
     this.world.update(dt, this.scroll, this.crashSpeed, this.time, this.camera, this.speedFactor * 0.5);
     obstacleAssets.accent.copy(this.world.palette.accent);
     this.particles.update(dt, this.crashSpeed);
@@ -634,67 +640,61 @@ export class Game {
 
   // ---------------------------------------------------------------- effects
 
-  /** Foam behind the tail, plus spray thrown off the outside rail in hard carves. */
+  /** The foam ribbon behind the board, plus fine spray flicked off the tail and the outside rail. */
   private emitWake(dt: number) {
-    if (this.crashed) return;
+    const p = this.player;
+    const tail = p.tailWorld(this.tmp);
+    const lean = clamp(p.vx / PHYSICS.latSpeed, -1, 1);
+    const riding = p.grounded && !this.crashed;
+    this.wake.update(dt, this.scroll, p.x, tail.z, riding, Math.abs(lean) + this.speedFactor * 0.6, this.time);
+    if (!riding) return;
+
     this.wakeTimer -= dt;
-    if (this.wakeTimer > 0 || !this.player.grounded) return;
-    this.wakeTimer = 0.028;
-    const tail = this.player.tailWorld(this.tmp);
-    const lean = clamp(this.player.vx / PHYSICS.latSpeed, -1, 1);
-    for (const side of [-1, 1]) {
+    if (this.wakeTimer > 0) return;
+    this.wakeTimer = 0.022;
+    // rooster tail: a few fine droplets kicked up and back
+    for (let i = 0; i < 2; i++) {
       this.particles.emit({
-        x: tail.x + side * 0.32,
-        y: tail.y,
-        z: tail.z,
-        vx: side * (1.1 + Math.random() * 0.8) + this.player.vx * 0.08,
-        vy: 0.4 + Math.random() * 0.6,
-        vz: 0,
-        life: 0.9,
-        size: 0.5,
-        sizeEnd: 1.5,
-        color: "#d8f6ff",
-        alpha: 0.5,
-        gravity: 1,
-        drag: 1.2,
+        x: tail.x + (Math.random() - 0.5) * 0.3,
+        y: p.waterLevel + 0.12,
+        z: tail.z - 0.3,
+        vx: (Math.random() - 0.5) * 1.4,
+        vy: 1.5 + Math.random() * 2.4,
+        vz: 1.5 + Math.random() * 3,
+        life: 0.35 + Math.random() * 0.25,
+        size: 0.12 + Math.random() * 0.1,
+        sizeEnd: 0.02,
+        color: "#f2fbff",
+        alpha: 0.75,
+        gravity: 16,
+        drag: 0.3,
       });
     }
-    // rooster tail
-    this.particles.emit({
-      x: tail.x,
-      y: tail.y + 0.1,
-      z: tail.z - 0.2,
-      vx: (Math.random() - 0.5) * 1.5,
-      vy: 2 + Math.random() * 1.5,
-      vz: 2 + Math.random() * 2,
-      life: 0.5,
-      size: 0.35,
-      sizeEnd: 0.05,
-      color: "#eaffff",
-      alpha: 0.7,
-      gravity: 12,
-      drag: 0.5,
-    });
-    if (Math.abs(lean) > 0.55) {
+    if (Math.abs(lean) > 0.5) {
       const out = -Math.sign(lean); // spray flies off the side you're carving away from
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < 3; i++) {
         this.particles.emit({
           x: tail.x + out * 0.4,
-          y: tail.y + 0.1,
+          y: p.waterLevel + 0.15,
           z: tail.z - 0.6,
-          vx: out * (3 + Math.random() * 3),
-          vy: 2.5 + Math.random() * 2.5,
-          vz: 1 + Math.random() * 2,
-          life: 0.6,
-          size: 0.3,
-          sizeEnd: 0.05,
-          color: "#cfefff",
+          vx: out * (3 + Math.random() * 4),
+          vy: 2 + Math.random() * 3,
+          vz: 1 + Math.random() * 2.5,
+          life: 0.45 + Math.random() * 0.2,
+          size: 0.13 + Math.random() * 0.1,
+          sizeEnd: 0.02,
+          color: "#dff4ff",
           alpha: 0.8,
-          gravity: 14,
+          gravity: 15,
           drag: 0.4,
         });
       }
     }
+  }
+
+  /** Jump button on touch devices, held = trick in the air. */
+  setJumpButton(active: boolean) {
+    this.input.setButtonJump(active);
   }
 
   // ---------------------------------------------------------------- camera + render
@@ -720,7 +720,7 @@ export class Game {
       const jumpLift = this.player.height * 0.4;
       targetPos = this.tmp.set(this.camX, CAM.height + py * 0.5 + jumpLift - this.camBump, CAM.back + (this.crashed ? 1.8 : 0));
       targetLook = new THREE.Vector3(px * 0.55, CAM.lookY + py * 0.4 + this.player.height * 0.25, CAM.lookAhead);
-      targetFov = CAM.fov + this.speedFactor * 9 + (this.slowmoTime > 0 ? -4 : 0);
+      targetFov = CAM.fov + this.speedFactor * 11 + (this.slowmoTime > 0 ? -4 : 0);
       if (this.crashed) targetLook.set(px * 0.6, 1.2, -4);
     }
     this.camPos.lerp(targetPos, k);
