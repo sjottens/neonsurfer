@@ -1,6 +1,10 @@
 import "./styles.css";
+import { inject } from "@vercel/analytics";
 import { Game } from "./game/Game";
 import { UI } from "./game/UI";
+
+// Vercel Web Analytics (no-op outside Vercel / in dev, no cookies).
+inject();
 
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement | null;
 const uiRoot = document.getElementById("ui-root");
